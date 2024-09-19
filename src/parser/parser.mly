@@ -1,5 +1,4 @@
 %{
-  [@@@warning "-32"]
   open Parser_types
 
   let point_of_position Lexing.{ pos_lnum; pos_cnum; _ } = 
@@ -30,22 +29,20 @@
   | Canonical _ -> "@canonical"
   | Inline | Open | Closed | Hidden -> "<internal>"
 
-type unimplemented = Top_level_error | Table | Media
-exception Debug of unimplemented Loc.with_location  
-let _ = Printexc.register_printer (function
-  | Debug unimplemented_token_with_location -> 
-    begin
-      let Loc.{ location = _location; value = token } = unimplemented_token_with_location in 
-      let error_message = match token with 
-      | Top_level_error -> "Error in Parser.main rule"
-      | Table -> "table"
-      | Media -> "media" 
-      in
-      Option.some @@ Printf.sprintf "Parser failed on: %s" error_message
-    end 
-  | _ -> None
-)
-exception No_children of string Loc.with_location
+  type unimplemented = Top_level_error 
+  exception Debug of unimplemented Loc.with_location  
+  let _ = Printexc.register_printer (function
+    | Debug unimplemented_token_with_location -> 
+      begin
+        let Loc.{ location = _location; value = token } = unimplemented_token_with_location in 
+        let error_message = match token with 
+          | Top_level_error -> "Error in Parser.main rule"
+        in
+        Option.some @@ Printf.sprintf "Parser failed on: %s" error_message
+      end 
+    | _ -> None
+  )
+  exception No_children of string Loc.with_location
 
   let exn_location : only_for_debugging:lexspan -> failed_on:unimplemented -> exn = 
     fun ~only_for_debugging:loc ~failed_on  -> Debug (wrap_location loc failed_on)  
@@ -70,7 +67,86 @@ exception No_children of string Loc.with_location
   | Open -> `Tag `Open 
   | Closed -> `Tag `Closed
   | Hidden -> `Tag `Hidden
+  (* TODO: replace this with real error handling. Don't throw exceptions *)
   | tag -> raise @@ No_children (wrap_location loc @@ Printf.sprintf "Tag %s expects children" (pp_tag tag)) 
+
+  type align_error = 
+  | Invalid_align (* An invalid align cell *)
+  | Not_align (* Not an align cell *)
+
+  (* This could be handled in the parser, I think *)
+  let valid_align_cell text = 
+      begin
+        match String.length text with
+        | 0 -> Ok None
+        | 1 -> 
+          begin
+            match text.[0] with
+            | ':' -> Ok (Some `Center)
+            | '-' -> Ok None
+            | _ -> Error Not_align
+          end
+        | len -> 
+          if String.for_all (Char.equal '-') (String.sub text 1 (len - 2)) then  
+            match text.[0], text.[pred len] with
+              | ':', '-' -> Ok (Some `Left)
+              | '-', ':' -> Ok (Some `Right)
+              | ':', ':' -> Ok (Some `Center)
+              | '-', '-' -> Ok None
+              | _ -> Error Invalid_align
+          else Error Not_align
+      end
+
+  (* NOTE: (@FayCarsons) 
+
+     This is a short-circuiting fold, if we get something that isn't a valid alignment then bail and return it.
+     When we get something that doesn't look like an align at all, we check to see if we've gotten 
+     any valid aligns, if so we assume that the cell being considered is supposed to be an align and treat it as an error,
+     otherwise we assume the row is not supposed to be an align row *)
+  let rec valid_align_row ?(acc = []) : Ast.inline_element Loc.with_location list -> (Ast.alignment option list, align_error) result
+  = function
+    | Loc.{ value = `Word cell; _ } :: rest -> 
+      begin
+        match valid_align_cell cell with
+        | Ok alignment -> 
+          valid_align_row ~acc:(alignment :: acc) rest 
+        | Error Not_align when List.length acc > 0 -> Error Invalid_align
+        | Error err -> Error err
+      end
+    | Loc.{ value = `Space "\n"; _ } :: _ when List.length acc > 0 ->
+      Error Invalid_align
+    | Loc.{ value = `Space _; _ } :: rest -> 
+      valid_align_row ~acc rest
+    | [] -> 
+      Ok acc
+    | _ -> Error Not_align
+
+  (* Wrap a list of words in a paragraph, used for 'light' table headers *)
+  let to_paragraph : Ast.inline_element Loc.with_location list -> Ast.nestable_block_element Loc.with_location list 
+    = fun words ->
+        let span = Loc.span @@ List.map Loc.location words in 
+        [ Loc.at span (`Paragraph words) ]
+
+  let recover_data : Ast.inline_element Loc.with_location list -> Ast.nestable_block_element Ast.row 
+    = List.map (fun word -> 
+        let loc = Loc.location word in 
+        [ Loc.at loc @@ `Paragraph [ word ] ], `Data
+      )
+
+  let media_kind_of_target = function
+    | Audio -> `Audio
+    | Video -> `Video
+    | Image -> `Image
+
+  let href_of_media = function
+    | Reference name -> `Reference name
+    | Link uri -> `Link uri
+
+  let split_simple_media Loc.{ location; value = (media, target) } = 
+    (Loc.at location media, target)
+
+  let split_replacement_media Loc.{ location; value = (media, target, content) } =
+    (Loc.at location media, target, content)
 
 %}
 
@@ -115,8 +191,8 @@ exception No_children of string Loc.with_location
 %token <string> Ref_with_replacement 
 %token <string> Simple_link 
 %token <string> Link_with_replacement
-%token <Parser_types.(media * media_target)> Media 
-%token <Parser_types.(media * media_target * string)> Media_with_replacement
+%token <(Parser_types.media * Parser_types.media_target)> Media 
+%token <(Parser_types.media * Parser_types.media_target * string)> Media_with_replacement
 %token <string> Verbatim
 
 %token END
@@ -134,6 +210,7 @@ let main :=
   | ~ = located(toplevel)+; END; <>
   | _ = whitespace; { [] }
   | END; { [] }
+  (* TODO: replace w/ real error handling *)
   | error; { raise @@ exn_location ~only_for_debugging:$loc ~failed_on:Top_level_error }
 
 let toplevel :=
@@ -202,11 +279,59 @@ let table_heavy == TABLE_HEAVY; grid = row_heavy*; RIGHT_BRACE; {
     (abstract, `Heavy) 
   }
 
-let table_light := TABLE_LIGHT; { raise @@ exn_location ~only_for_debugging:$loc ~failed_on:Table }
+let cell_light == BAR?; data = located(inline_element)+; { (to_paragraph data, `Data) } 
+let row_light := ~ = cell_light+; BAR?; NEWLINE; <>     
+
+let align_cell == BAR?; inner = located(inline_element); { inner }
+let align_row := ~ = align_cell+; BAR?; NEWLINE; <>
+
+(* NOTE: (@FayCarsons) Presently, behavior is to 'recover' when we have an invalid align row. Is this what we want? *)
+let table_light :=
+  (* If the first row is the alignment row then the rest should be data *)
+  | TABLE_LIGHT; align = align_row; data = row_light+; RIGHT_BRACE;
+    {
+      match valid_align_row align with
+      | Ok alignment -> (data, Some alignment), `Light
+      | Error Invalid_align -> (data, None), `Light
+      | Error Not_align ->  
+        let align_as_data = recover_data align in
+        (align_as_data :: data, None), `Light
+    }
+
+  (* Otherwise the first should be the headers, the second align, and the rest data *)
+  | TABLE_LIGHT; header = row_light; align = align_row; data = row_light+; RIGHT_BRACE;
+    { 
+      match valid_align_row align with
+      | Ok alignment -> (header :: data, Some alignment), `Light
+      | Error Invalid_align -> 
+        (header :: data, None), `Light
+      | Error Not_align -> 
+        let align_as_data = recover_data align in
+        (header :: align_as_data :: data, None), `Light
+    }
+
+  (* If there's only one row and it's not the align row, then it's data *)
+  | TABLE_LIGHT; data = row_light+; RIGHT_BRACE; 
+    { (data, None), `Light }
+
+  (* If there's nothing inside, return an empty table *)
+  | TABLE_LIGHT; SPACE*; RIGHT_BRACE; { ([[]], None), `Light }
 
 let table := 
   | ~ = table_heavy; <`Table>
   | ~ = table_light; <`Table>
+
+(* MEDIA *)
+
+let media := 
+  | media = located(Media); RIGHT_BRACE; 
+    { let (located_media_kind, media_href) = split_simple_media media in 
+      let wrapped_located_kind = Loc.map href_of_media located_media_kind in 
+      `Media (`Simple, wrapped_located_kind, "", media_kind_of_target media_href) }
+  | media = located(Media_with_replacement); RIGHT_BRACE;
+    { let (located_media_kind, media_href, content) = split_replacement_media media in 
+      let wrapped_located_kind = Loc.map href_of_media located_media_kind in 
+      `Media (`With_text, wrapped_located_kind, content, media_kind_of_target media_href) }
 
 (* TOP-LEVEL ELEMENTS *)
 
@@ -217,7 +342,7 @@ let nestable_block_element :=
   | ~ = located(Modules)+; RIGHT_BRACE; <`Modules>
   | ~ = list_element; <>
   | ~ = table; <> 
-  | _ = Media; { raise @@ exn_location ~only_for_debugging:$loc ~failed_on:Media }
+  | ~ = media; <>
   | ~ = Math_block; <`Math_block>
 
 let heading := 
