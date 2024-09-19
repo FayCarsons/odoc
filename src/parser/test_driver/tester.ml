@@ -1,5 +1,4 @@
-  let text = "\nfoo\n"
+open! Odoc_parser_test
 
-  let _ =
-    let location = Lexing.dummy_pos in
-    let _ = Odoc_parser.parse_comment ~text ~location in ()
+let text = "{ul {li foo} {li bar}}"
+let _ = Test.test text
