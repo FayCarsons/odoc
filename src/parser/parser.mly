@@ -1,8 +1,8 @@
 %{
-  open Parser_types
+  open Parser_aux
 
-  let point_of_position Lexing.{ pos_lnum; pos_cnum; _ } = 
-    Loc.{ line = pos_lnum; column = pos_cnum }
+  let point_of_position Lexing.{ pos_lnum; pos_cnum; pos_bol; _ } = 
+      Loc.{ line = pos_lnum; column = pos_cnum - pos_bol }
 
   type lexspan = (Lexing.position * Lexing.position)
   let to_location :  lexspan -> Loc.span =
@@ -16,7 +16,7 @@
     let location = to_location loc in 
     { location; value }
 
-  let pp_tag : Parser_types.tag -> string = function 
+  let pp_tag : Parser_aux.tag -> string = function 
   | Author _ -> "@author"
   | Deprecated -> "@deprecated"
   | Param _ -> "@param"
@@ -49,7 +49,7 @@
 
   let tag : Ast.tag -> Ast.block_element = fun tag -> `Tag tag 
 
-  let tag_with_element (children : Ast.nestable_block_element Loc.with_location list) : Parser_types.tag -> Ast.block_element = function 
+  let tag_with_element (children : Ast.nestable_block_element Loc.with_location list) : Parser_aux.tag -> Ast.block_element = function 
   | Before version -> tag @@ `Before (version, children) 
   | Deprecated -> tag @@ `Deprecated children
   | Return -> tag @@ `Return children
@@ -185,14 +185,14 @@
 
 %token <int * string option> Section_heading
 
-%token <Parser_types.tag> Tag
+%token <Parser_aux.tag> Tag
 
 %token <string> Simple_ref 
 %token <string> Ref_with_replacement 
 %token <string> Simple_link 
 %token <string> Link_with_replacement
-%token <(Parser_types.media * Parser_types.media_target)> Media 
-%token <(Parser_types.media * Parser_types.media_target * string)> Media_with_replacement
+%token <(Parser_aux.media * Parser_aux.media_target)> Media 
+%token <(Parser_aux.media * Parser_aux.media_target * string)> Media_with_replacement
 %token <string> Verbatim
 
 %token END
@@ -202,7 +202,7 @@
 %%
 
 (* Utility which wraps the return value of a producer in `Loc.with_location` *)
-let located(rule) == value = rule; { wrap_location $loc value }
+let located(rule) == inner = rule; { wrap_location $sloc inner }
 
 (* ENTRY-POINT *)
 
