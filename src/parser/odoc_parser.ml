@@ -115,7 +115,7 @@ let parse_comment ~location ~text =
   let unwrapped_token lexbuf = 
     let Loc.{ location; value = token } = Lexer.token lexer_state lexbuf in
     Printf.printf "Token: %s\nStart: (%d, %d) End: (%d, %d)\n\n"
-    (Parser_utils.describe token) 
+    (Describe.print token) 
     location.start.line location.start.column
     location.end_.line location.end_.column;
     
