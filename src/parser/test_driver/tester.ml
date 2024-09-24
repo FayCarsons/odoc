@@ -81,10 +81,14 @@ let run_test (label, case) =
     
 
 let () = 
-  let cases = if Array.length Sys.argv > 1 then
-    match Sys.argv.(1) with 
-    | "code" -> code_cases
-    | _ -> 
-       cases
-  else 
-    List.iter run_test cases
+  let cases = 
+    if Array.length Sys.argv > 1 then
+      match Sys.argv.(1) with 
+      | "code" -> code_cases
+      | _ -> 
+        print_endline "unrecognized argument - running documentation_cases";
+        documentation_cases
+    else 
+      documentation_cases
+  in 
+  List.iter run_test cases
