@@ -1,12 +1,36 @@
 open! Odoc_parser_test
 
-let cases =
+(* 
+   NOTE (@FayCarsons): for anyone working on this parser - this is probably 
+   the easiest way to check if something is working. The tests are numerous 
+   and difficult to parse. A test suite will fail in its entirety if one case 
+   throws an exception. 
+
+   If you need to test a specific parser rule or test case, add it here and 
+   `dune exec tester -- {test cases you want to run}` 
+*)
+
+let code_cases =
+  [
+    "basic", "{[foo]}";
+    "empty", "{[]}";
+    "whitespace only", "{[ ]}";
+    "blank line only", "{[\n  \n]}";
+    "whitespace", "{[foo bar]}";
+    "newline", "{[foo\nbar]}";
+    "carriage return", "{[foo\r\nbar]}";
+    "contains blank line", "{[foo\n\nbar]}";
+    "leading whitespace", "{[ foo]}";
+  ]
+
+(* Cases (mostly) taken from the 'odoc for library authors' document *)
+let documentation_cases =
   [ 
     "Light list", "- a\n - b\n - c"; 
     "Heavy list", "{ul {li foo} {li bar} {li baz}}";
     "Simple ref", "{!Stdlib.Buffer}";
     "Ref w/ replacement", "{{: https://ocaml.org/ }the OCaml website}";
-    "Modules", "{!modules: A B C}";
+    "Modules", "{!modules: Foo Bar Baz}";
     "Block tag", "@see \"foo.ml\" bar baz quux\n";
     "Inline tag", "@author Fay Carsons";
     "Simple tag", "@open";
@@ -56,4 +80,11 @@ let run_test (label, case) =
       tokens_string
     
 
-let () = List.iter run_test cases
+let () = 
+  let cases = if Array.length Sys.argv > 1 then
+    match Sys.argv.(1) with 
+    | "code" -> code_cases
+    | _ -> 
+       cases
+  else 
+    List.iter run_test cases
