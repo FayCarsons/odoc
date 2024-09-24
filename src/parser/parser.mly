@@ -270,25 +270,29 @@ let list_element :=
 
 (* TABLES *)
 
-let cell_heavy := cell_kind = Table_cell; children = located(nestable_block_element)*; RIGHT_BRACE; { (children, cell_kind) }
-let row_heavy == TABLE_ROW; cells = list(cell_heavy); RIGHT_BRACE;  { cells } 
-let table_heavy == TABLE_HEAVY; grid = row_heavy*; RIGHT_BRACE; { 
+let cell_heavy := cell_kind = Table_cell; whitespace?; children = located(nestable_block_element)*; whitespace?; RIGHT_BRACE; whitespace?; { (children, cell_kind) }
+let row_heavy == TABLE_ROW; whitespace?; cells = list(cell_heavy); RIGHT_BRACE; whitespace?;  { cells } 
+let table_heavy == TABLE_HEAVY; whitespace?; grid = row_heavy*; RIGHT_BRACE; { 
     (* Convert into an 'abstract table' which can be either a light or heavy syntax table. 
        We know this is a heavy table, which cannot have alignment, however, so the alignment field is `None` *)
     let abstract : Ast.nestable_block_element Ast.abstract_table = (grid, None) in 
     (abstract, `Heavy) 
   }
 
-let cell_light == BAR?; data = located(inline_element)+; { (to_paragraph data, `Data) } 
+let cell_light == BAR?; whitespace?; data = located(inline_element)+; { (to_paragraph data, `Data) } 
 let row_light := ~ = cell_light+; BAR?; NEWLINE; <>     
 
-let align_cell == BAR?; inner = located(inline_element); { inner }
+(* NOTE: 
+   Light tables are broken due to whitespace parsing - this should be a list of 
+   inline elements maybe? then filter out `Space elts, and if there's anything 
+   but a single `Word then its not an align cell? *)
+let align_cell == BAR?; whitespace?; inner = located(inline_element); { inner }
 let align_row := ~ = align_cell+; BAR?; NEWLINE; <>
 
 (* NOTE: (@FayCarsons) Presently, behavior is to 'recover' when we have an invalid align row. Is this what we want? *)
 let table_light :=
   (* If the first row is the alignment row then the rest should be data *)
-  | TABLE_LIGHT; align = align_row; data = row_light+; RIGHT_BRACE;
+  | TABLE_LIGHT; align = align_row; data = row_light+; whitespace?; RIGHT_BRACE;
     {
       match valid_align_row align with
       | Ok alignment -> (data, Some alignment), `Light
@@ -299,7 +303,7 @@ let table_light :=
     }
 
   (* Otherwise the first should be the headers, the second align, and the rest data *)
-  | TABLE_LIGHT; header = row_light; align = align_row; data = row_light+; RIGHT_BRACE;
+  | TABLE_LIGHT; header = row_light; align = align_row; data = row_light+; whitespace?; RIGHT_BRACE;
     { 
       match valid_align_row align with
       | Ok alignment -> (header :: data, Some alignment), `Light
@@ -339,7 +343,7 @@ let nestable_block_element :=
   | ~ = Verbatim; <`Verbatim>
   | ~ = located(inline_element)+; <`Paragraph>
   | ~ = Code_block; RIGHT_CODE_DELIMITER; <`Code_block>
-  | ~ = located(Modules)+; RIGHT_BRACE; <`Modules>
+  | ~ = located(Modules)+; <`Modules>
   | ~ = list_element; <>
   | ~ = table; <> 
   | ~ = media; <>
