@@ -79,6 +79,16 @@ let offset_to_location :
   in
   scan_to_last_newline reversed_newlines
 
+module Tester = struct
+  type token = Parser.token
+  let token = 
+    let dummy_loc = 
+      Lexer.{ warnings = []; file = "f.ml" ; offset_to_location = Fun.const Loc.{ line = 1; column = 0} } in
+    Lexer.token dummy_loc
+  let parse = Parser.main
+  let string_of_token = Describe.describe
+end
+
 (* Given a Loc.point and the result of [parse_comment], this function returns
    a valid Lexing.position *)
 let position_of_point : t -> Loc.point -> Lexing.position =
