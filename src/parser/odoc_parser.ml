@@ -117,6 +117,7 @@ let parse_comment ~location ~text =
      to a module functor. So we pass our current filename to the lexbuf here *)
   lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = Lexing.(location.pos_fname) };
   let lexer_state = 
+    (* Here? *)
     Lexer.{ warnings = []
           ; offset_to_location = offset_to_location ~reversed_newlines ~comment_location:location
           ; file = Lexing.(location.pos_fname) } 
@@ -124,8 +125,9 @@ let parse_comment ~location ~text =
   (* Remove the `Loc.with_location` wrapping our token because Menhir cannot handle that *)
   let unwrapped_token lexbuf = 
     let Loc.{ location; value = token } = Lexer.token lexer_state lexbuf in
+    Lexing.set_position lexbuf Lexing.{ lexbuf.lex_curr_p with pos_lnum = location.end_.line; pos_cnum = location.end_.column };
     Printf.printf "Token: %s\nStart: (%d, %d) End: (%d, %d)\n\n"
-    (Describe.print token) 
+    (Describe.describe token) 
     location.start.line location.start.column
     location.end_.line location.end_.column;
     

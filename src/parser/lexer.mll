@@ -144,6 +144,7 @@ type input = {
   mutable warnings : Warning.t list;
 }
 
+(* TODO: Rewrite to add location inside tokens *)
 let with_location_adjustments
     k lexbuf input ?start_offset ?adjust_start_by ?end_offset ?adjust_end_by value =
 

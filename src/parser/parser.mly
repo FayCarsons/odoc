@@ -1,8 +1,8 @@
 %{
   open Parser_aux
 
-  let point_of_position Lexing.{ pos_lnum; pos_cnum; pos_bol; _ } = 
-      Loc.{ line = pos_lnum; column = pos_cnum - pos_bol }
+  let point_of_position Lexing.{ pos_lnum; pos_cnum;  _ } = 
+      Loc.{ line = pos_lnum; column = pos_cnum  }
 
   type lexspan = (Lexing.position * Lexing.position)
   let to_location :  lexspan -> Loc.span =
@@ -202,7 +202,7 @@
 %%
 
 (* Utility which wraps the return value of a producer in `Loc.with_location` *)
-let located(rule) == inner = rule; { wrap_location $sloc inner }
+let located(rule) == inner = rule; { wrap_location $loc inner }
 
 (* ENTRY-POINT *)
 
@@ -233,7 +233,13 @@ let inline_element :=
   | ~ = Code_span; <`Code_span>
   | ~ = Raw_markup; <`Raw_markup>
   | style = Style; inner = located(inline_element)*; RIGHT_BRACE; { `Styled (style, inner) }
-  | ~ = Math_span; <`Math_span>
+  | math = Math_span; 
+    {
+      let start, end_ = $loc(math) in
+      let open Lexing in
+      Printf.printf "col start: %d, col end: %d\n" start.pos_cnum end_.pos_cnum;
+      `Math_span math 
+    }
   | ~ = ref; <>
   | ~ = link; <>
 
