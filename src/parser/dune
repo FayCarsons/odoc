@@ -2,7 +2,7 @@
 
 (menhir
  (modules parser)
- )
+ (flags --explain --inspection --table --dump))
 
 (library
  (name odoc_parser)

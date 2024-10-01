@@ -1,9 +1,8 @@
 type media = Reference of string | Link of string 
 type media_target = Audio | Video | Image
 
-
 type tag =  
-    Author of string
+  | Author of string
   | Deprecated
   | Param of string 
   | Raise of string 
