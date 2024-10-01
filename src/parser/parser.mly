@@ -74,28 +74,42 @@
   | Invalid_align (* An invalid align cell *)
   | Not_align (* Not an align cell *)
 
-  (* This could be handled in the parser, I think *)
-  let valid_align_cell text = 
-      begin
-        match String.length text with
-        | 0 -> Ok None
-        | 1 -> 
-          begin
-            match text.[0] with
-            | ':' -> Ok (Some `Center)
-            | '-' -> Ok None
-            | _ -> Error Not_align
-          end
-        | len -> 
-          if String.for_all (Char.equal '-') (String.sub text 1 (len - 2)) then  
-            match text.[0], text.[pred len] with
-              | ':', '-' -> Ok (Some `Left)
-              | '-', ':' -> Ok (Some `Right)
-              | ':', ':' -> Ok (Some `Center)
-              | '-', '-' -> Ok None
-              | _ -> Error Invalid_align
-          else Error Not_align
-      end
+  let valid_elements (cell : Ast.inline_element list): string option = 
+    let rec go acc = function
+      | `Word _ :: _ when Option.is_some acc -> None 
+      | `Word word :: rest ->
+        go (Some word) rest
+      | `Space _ :: rest -> 
+        go acc rest
+      | _ :: _ -> None 
+      | [] -> acc
+    in 
+    go None cell
+
+  let valid_word word =
+    match String.length word with
+    | 0 -> Ok None
+    | 1 -> 
+    begin
+    match word.[0] with
+    | ':' -> Ok (Some `Center)
+    | '-' -> Ok None
+    | _ -> Error Not_align
+    end
+    | len -> 
+    if String.for_all (Char.equal '-') (String.sub word 1 (len - 2)) then  
+    match word.[0], word.[pred len] with
+    | ':', '-' -> Ok (Some `Left)
+    | '-', ':' -> Ok (Some `Right)
+    | ':', ':' -> Ok (Some `Center)
+    | '-', '-' -> Ok None
+    | _ -> Error Invalid_align
+    else Error Not_align
+
+  let valid_align_cell cell = 
+    match List.map Loc.value cell |> valid_elements with
+    | Some word -> valid_word word 
+    | None -> Error Not_align
 
   (* NOTE: (@FayCarsons) 
 
@@ -103,23 +117,19 @@
      When we get something that doesn't look like an align at all, we check to see if we've gotten 
      any valid aligns, if so we assume that the cell being considered is supposed to be an align and treat it as an error,
      otherwise we assume the row is not supposed to be an align row *)
-  let rec valid_align_row ?(acc = []) : Ast.inline_element Loc.with_location list -> (Ast.alignment option list, align_error) result
-  = function
-    | Loc.{ value = `Word cell; _ } :: rest -> 
-      begin
-        match valid_align_cell cell with
-        | Ok alignment -> 
-          valid_align_row ~acc:(alignment :: acc) rest 
-        | Error Not_align when List.length acc > 0 -> Error Invalid_align
-        | Error err -> Error err
-      end
-    | Loc.{ value = `Space "\n"; _ } :: _ when List.length acc > 0 ->
-      Error Invalid_align
-    | Loc.{ value = `Space _; _ } :: rest -> 
-      valid_align_row ~acc rest
-    | [] -> 
-      Ok acc
+  let valid_align_row (row : Ast.inline_element Loc.with_location list list): (Ast.alignment option list, align_error) result =
+    let (align, not_align) = List.map valid_align_cell row |> List.partition (function Ok _ | Error Invalid_align -> true | _ -> false) in 
+    let total_len = List.length row in
+    let rec invert acc : (Ast.alignment option, align_error) result list -> (Ast.alignment option list, align_error) result = function 
+    | Ok align :: rest -> invert (align :: acc) rest
+    | Error err :: _ -> Error err
+    | [] ->  Ok (List.rev acc) 
+    in 
+    match not_align with 
+    | [] -> invert [] align 
+    | _ :: _ when List.length align > (total_len / 2) -> Error Invalid_align
     | _ -> Error Not_align
+
 
   (* Wrap a list of words in a paragraph, used for 'light' table headers *)
   let to_paragraph : Ast.inline_element Loc.with_location list -> Ast.nestable_block_element Loc.with_location list 
@@ -127,11 +137,12 @@
         let span = Loc.span @@ List.map Loc.location words in 
         [ Loc.at span (`Paragraph words) ]
 
-  let recover_data : Ast.inline_element Loc.with_location list -> Ast.nestable_block_element Ast.row 
-    = List.map (fun word -> 
-        let loc = Loc.location word in 
-        [ Loc.at loc @@ `Paragraph [ word ] ], `Data
-      )
+  (* Merges inline elements within a cell into a single paragraph element, and tags cells w/ tag *)
+  let merged_tagged_row tag : Ast.inline_element Loc.with_location list list -> Ast.nestable_block_element Ast.row  
+    = List.map (fun elts -> to_paragraph elts, tag)
+
+  let as_data = merged_tagged_row `Data
+  let as_header = merged_tagged_row `Header
 
   let media_kind_of_target = function
     | Audio -> `Audio
@@ -227,6 +238,21 @@ let whitespace :=
 
 (* INLINE ELEMENTS *)
 
+(* TODO: enforce invariant: 
+  
+(* Convenient abbreviation for use in patterns. *)
+type token_that_always_begins_an_inline_element =
+  [ `Word of string
+  | `Code_span of string
+  | `Raw_markup of string option * string
+  | `Begin_style of style
+  | `Simple_reference of string
+  | `Begin_reference_with_replacement_text of string
+  | `Simple_link of string
+  | `Begin_link_with_replacement_text of string
+  | `Math_span of string ]
+
+*)
 let inline_element := 
   | ~ = whitespace; <>
   | ~ = Word; <`Word>
@@ -250,7 +276,6 @@ let ref :=
   | ref_body = located(Ref_with_replacement); children = located(inline_element)*; 
     { `Reference (`With_text, ref_body, children) }
 
-(* TODO : Fix the `with_replacement` producers in the following two rules, if they're broken. Ask what `with_replacement` refers to *)
 let link := 
   | link_body = Simple_link; children = located(inline_element)+; RIGHT_BRACE; { `Link (link_body, children) }
   | link_body = Link_with_replacement; children = located(inline_element)+; RIGHT_BRACE; { `Link (link_body, children) }
@@ -285,44 +310,40 @@ let table_heavy == TABLE_HEAVY; whitespace?; grid = row_heavy*; RIGHT_BRACE; {
     (abstract, `Heavy) 
   }
 
-let cell_light == BAR?; whitespace?; data = located(inline_element)+; { (to_paragraph data, `Data) } 
-let row_light := ~ = cell_light+; BAR?; NEWLINE; <>     
-
-(* NOTE: 
-   Light tables are broken due to whitespace parsing - this should be a list of 
-   inline elements maybe? then filter out `Space elts, and if there's anything 
-   but a single `Word then its not an align cell? *)
-let align_cell == BAR?; whitespace?; inner = located(inline_element); { inner }
-let align_row := ~ = align_cell+; BAR?; NEWLINE; <>
+let cell_light == BAR?; ~ = located(inline_element)+; <> (* Ast.cell *)
+let row_light := ~ = cell_light+; BAR?; NEWLINE; <>  (* Ast.row *)
 
 (* NOTE: (@FayCarsons) Presently, behavior is to 'recover' when we have an invalid align row. Is this what we want? *)
 let table_light :=
   (* If the first row is the alignment row then the rest should be data *)
-  | TABLE_LIGHT; align = align_row; data = row_light+; whitespace?; RIGHT_BRACE;
+  | TABLE_LIGHT; align = row_light; data = row_light+; RIGHT_BRACE;
     {
+      let data = List.map as_data data in
       match valid_align_row align with
       | Ok alignment -> (data, Some alignment), `Light
       | Error Invalid_align -> (data, None), `Light
       | Error Not_align ->  
-        let align_as_data = recover_data align in
+        let align_as_data = as_data align in
         (align_as_data :: data, None), `Light
     }
 
   (* Otherwise the first should be the headers, the second align, and the rest data *)
-  | TABLE_LIGHT; header = row_light; align = align_row; data = row_light+; whitespace?; RIGHT_BRACE;
+  | TABLE_LIGHT; header = row_light; align = row_light; data = row_light+; RIGHT_BRACE;
     { 
+      let data = List.map as_data data 
+      and header = as_header header in
       match valid_align_row align with
       | Ok alignment -> (header :: data, Some alignment), `Light
       | Error Invalid_align -> 
         (header :: data, None), `Light
       | Error Not_align -> 
-        let align_as_data = recover_data align in
+        let align_as_data = as_data align in
         (header :: align_as_data :: data, None), `Light
     }
 
   (* If there's only one row and it's not the align row, then it's data *)
   | TABLE_LIGHT; data = row_light+; RIGHT_BRACE; 
-    { (data, None), `Light }
+    { (List.map as_data data, None), `Light }
 
   (* If there's nothing inside, return an empty table *)
   | TABLE_LIGHT; SPACE*; RIGHT_BRACE; { ([[]], None), `Light }
@@ -348,7 +369,7 @@ let media :=
 let nestable_block_element := 
   | ~ = Verbatim; <`Verbatim>
   | ~ = located(inline_element)+; <`Paragraph>
-  | ~ = Code_block; RIGHT_CODE_DELIMITER; <`Code_block>
+  | ~ = Code_block; <`Code_block>
   | ~ = located(Modules)+; <`Modules>
   | ~ = list_element; <>
   | ~ = table; <> 
