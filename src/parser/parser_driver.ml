@@ -4,21 +4,53 @@ module Interpreter = MenhirInterpreter
 
 let unreachable s = failwith @@ Printf.sprintf "UNREACHABLE BRANCH IN %s\n" s
 
-module Context = struct
+module Context : sig
+  type with_position = Parser.token * Lexing.position * Lexing.position
+  type 'a t = {
+    file : string;
+    last_valid : 'a Interpreter.checkpoint;
+    current : focus option;
+    push_warning : Warning.t -> unit;
+    tokens : with_position list;
+  }
+  and focus = Main | Inline | Block | Tag
+
+  val create :
+    file:string ->
+    push_warning:(Warning.t -> unit) ->
+    first_checkpoint:'a Interpreter.checkpoint ->
+    'a t
+
+  val push_token : 'a t -> with_position -> 'a t
+  val peek : 'a t -> with_position option
+  val update_focus : 'a t -> 'b Interpreter.checkpoint -> 'a t
+
+  val context_string : 'a t -> string
+  val to_string : 'a t -> string
+end = struct
   open Interpreter
 
   let ( >>= ) = Option.bind
 
+  type with_position = Parser.token * Lexing.position * Lexing.position
   type 'a t = {
     file : string;
     last_valid : 'a checkpoint;
     current : focus option;
-    tokens : (Parser.token * Lexing.position * Lexing.position) list;
+    push_warning : Warning.t -> unit;
+    tokens : with_position list;
   }
   and focus = Main | Inline | Block | Tag
 
-  let create ~(file : string) ~beginning_checkpoint:last_valid =
-    { file; last_valid; current = None; tokens = [] }
+  let create (type a) ~(file : string) ~(push_warning : Warning.t -> unit)
+      ~(first_checkpoint : a checkpoint) =
+    {
+      file;
+      push_warning;
+      last_valid = first_checkpoint;
+      current = None;
+      tokens = [];
+    }
 
   let pp_checkpoint = function
     | InputNeeded _ -> "Input needed (Parser needs token)"
@@ -43,7 +75,7 @@ module Context = struct
     | { tokens = x :: _; _ } -> Some x
     | _ -> None
 
-  let pp self =
+  let to_string self =
     let current =
       Option.map
         (function
@@ -59,7 +91,7 @@ module Context = struct
       in
       Option.value ~default:"No tokens" token
     in
-    Printf.printf "{ checkpoint: %s; current: %s; most_recent_token: %s }\n%!"
+    Printf.sprintf "{ checkpoint: %s; current: %s; most_recent_token: %s }\n%!"
       (pp_checkpoint self.last_valid)
       current most_recent_token
 
@@ -76,7 +108,7 @@ module Context = struct
     | _ -> None
 
   let update_focus self = function
-    | Shifting (before, _after, _what_is_this_bool) ->
+    | Shifting (before, _after, _not_finished) ->
         top before
         >>= (function
               | Element (state, _, _, _) ->
@@ -88,18 +120,23 @@ module Context = struct
   let context_string : 'a t -> string = fun self -> string_of_focus self.current
 end
 
-let loc_of_positions :
+let make_span :
     file:string ->
     start_pos:Lexing.position ->
     end_pos:Lexing.position ->
     Loc.span =
  fun ~file ~start_pos ~end_pos ->
-  let of_position pos =
-    let open Lexing in
-    Loc.{ line = pos.pos_lnum; column = pos.pos_cnum - pos.pos_bol }
-  in
-  let start = of_position start_pos and end_ = of_position end_pos in
-  Loc.{ file; start; end_ }
+  Loc.
+    {
+      file;
+      start =
+        {
+          line = start_pos.pos_lnum;
+          column = start_pos.pos_cnum - start_pos.pos_bol;
+        };
+      end_ =
+        { line = end_pos.pos_lnum; column = end_pos.pos_cnum - end_pos.pos_bol };
+    }
 
 (*-----------------------------------------------------------------------------*)
 
@@ -123,7 +160,12 @@ let _find_context (env : 'a Interpreter.env) =
   find env
 
 let dummy_table : Ast.table = (([ [] ], None), `Light)
-let dummy_inline_element : Ast.inline_element = `Word "oops"
+let dummy_inline_element : Ast.inline_element = `Word ""
+
+(* This needs to be a big match where we construct the AST node which will be
+   inserted in place of the invalid element *)
+let dummy_node (type a) (_context : a Context.t) = assert false
+
 let how_many_times = ref 0
 
 let contextual_error_message (type a b) ~(context : a Context.t)
@@ -135,10 +177,21 @@ let contextual_error_message (type a b) ~(context : a Context.t)
   match checkpoint with
   | Interpreter.InputNeeded env | Interpreter.HandlingError env ->
       let offending_token = Context.peek context in
-      Printf.printf
-        "Handling an error: this is the offending token(?) \'%s\'\n%!"
-        (Option.map (fun (token, _, _) -> Describe.print token) offending_token
-        |> Option.value ~default:"NO TOKENS");
+      (match offending_token with
+      | Some ((Parser.Paragraph_style _ as token), start_pos, end_pos) ->
+          context.push_warning
+          @@ Parse_error.markup_should_not_be_used
+               ~what:(Describe.describe token)
+               (make_span ~file:context.file ~start_pos ~end_pos)
+      | Some (Parser.END, start_pos, end_pos) ->
+          context.push_warning
+          @@ Parse_error.not_allowed
+               ~what:(Describe.describe Parser.END)
+               ~in_what:(Context.context_string context)
+               (make_span ~file:context.file ~start_pos ~end_pos)
+      | _ ->
+          Printf.printf "UNHANDLED ERROR CASE!\nCONTEXT: %s\n%!"
+            (Context.to_string context));
       let _, start_pos, end_pos = List.hd context.tokens in
       print_endline "Got position from context";
       let env =
@@ -146,28 +199,22 @@ let contextual_error_message (type a b) ~(context : a Context.t)
           Interpreter.(N N_inline_element)
           start_pos dummy_inline_element end_pos env
       in
-      print_endline
-        "Fed dummy value to interpreter - contructing new checkpoint";
       (* TODO: THIS SEGFAULTS with the current light-table example I am feeding
           it. I think that's because when it encounters the '}' token it believes
           it should be reducing to an Ast.inline_element but I replace it with an
           Ast.table
 
          Ok I think I've verified the above, so what we need to do here is
-         essentially determine which container/higher-position symbol(I.E.
+         essentially determine which outer nonterminal symbol(I.E.
          Inline element, block element, tag) we're currently inside of and
          instead of returning to the current checkpoint, return to the checkpoint
          where we matched on that symbol with a dummy AST node?
+
+         is there a way to verify this?
       *)
       let checkpoint = Interpreter.input_needed env in
       continuation checkpoint
   | _ -> unreachable "contextual_error_message"
-
-let get_parse_error (type a) env : Interpreter.item list =
-  match Interpreter.stack env with
-  | (lazy (Cons (Interpreter.Element (state, _, _, _), _))) ->
-      Interpreter.items state
-  | (lazy Nil) -> unreachable "get_parse_error"
 
 (* This is the function we call to insert a dummy node into the AST & continue
    parsing when we encounter an error *)
@@ -185,39 +232,6 @@ let offer_solution :
 
 (*-----------------------------------------------------------------------------*)
 
-(* NOTE: Use `Interpreter.force_reduction ` to force the parser to continue w/
-    parsing in the event of an error.
-    Essentially, the error handling should look something like:
-    - Get context. What happened, where are we, what is the specific Odoc
-      element which cannot be parsed and which error message do we need to
-      push to `warnings`.
-    - Find jump destination. What state should the parser resume in?
-      The most trivial example would be in the case of something like
-      `(** @ *)` where our only option would be to jump to EOF after pushing a
-      "stray @" warning to the warning list. In that case,
-      do we simply stop parsing and return an empty AST?
-    Another potentially valuable function:
-    `Interpreter.feed symbol start_pos semantic_value end_pos env` *)
-
-(* Production, a specific nonterminal symbol with a left-hand and right-hand
-   side.
-
-   the Left Hand Side (LHS) is a symbol representing the production itself(???)
-   and the Right Hand Side (RHS) is the, potentially terminal, symbols which
-   break down into the sequence of tokens being matched on by the production.
-
-   My understanding:
-   for the rule
-   `let whitespace :=
-    | ~ = Space; <>
-    | SPACE; { " " }`
-
-    there are two productions
-    N_whitespace -> T_Space
-    N_whitespace -> T_SPACE
-*)
-
-(* Something like this, still needs a lot of fleshing out *)
 let run_parser ~(starting_location : Lexing.position)
     ~(next_token : unit -> Parser.token * Lexing.position * Lexing.position)
     ~(push_warning : Warning.t -> unit) : Ast.t =
@@ -234,41 +248,18 @@ let run_parser ~(starting_location : Lexing.position)
         let context = Context.update_focus context checkpoint in
         run ~context (Interpreter.resume checkpoint)
     | AboutToReduce _ as checkpoint -> run ~context (resume checkpoint)
-    | Rejected -> failwith "Input rejected"
+    | Rejected ->
+        (* What do we do here?? *)
+        failwith "Input rejected"
     | HandlingError _ as checkpoint ->
-        (* Use `Interpreter.force_reduction` to force the parser to continue w/
-            parsing in the event of an error.
-
-           Essentially, the error handling should look something like:
-           - Get context. What happened, where are we, what is the specific Odoc
-           element which cannot be parsed and which error message do we need to
-           push to `warnings`.
-           - Find jump destination. Where can we jump to? The most trivial example
-           would be in the case of something like
-           `(** @ *)` where our only option would be to jump to EOF. In that case,
-           do we simply stop parsing and return an empty AST? *)
-        print_endline "IN ERROR ARM";
-        Context.pp context;
-        let token = Context.peek context in
-        Option.iter
-          (fun (token, start_pos, end_pos) ->
-            let span =
-              loc_of_positions ~file:context.file ~start_pos ~end_pos
-            in
-            let warning =
-              Parse_error.not_allowed
-                ~what:(String.escaped @@ Describe.print token)
-                ~in_what:(Context.context_string context)
-                span
-            in
-            push_warning warning)
-          token;
+        Printf.printf "IN ERROR ARM\nContext: %s\n%!"
+          (Context.to_string context);
         handle_error ~context checkpoint
     | Accepted ast -> ast
   in
-  let beginning_checkpoint = Incremental.main starting_location in
+  let first_checkpoint = Incremental.main starting_location in
   let context =
-    Context.create ~file:starting_location.Lexing.pos_fname
-      ~beginning_checkpoint
+    Context.create ~file:starting_location.Lexing.pos_fname ~push_warning
+      ~first_checkpoint
   in
-  run ~context beginning_checkpoint
+  run ~context first_checkpoint
