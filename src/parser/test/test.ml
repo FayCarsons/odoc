@@ -13,6 +13,19 @@ let parser_output formatter v =
   Sexplib0.Sexp.pp_hum formatter output;
   Format.pp_print_flush formatter ()
 
+let output formatter ((ast, warnings) : Ast.t * Warning.t list) =
+  let ast_sexp = Ast_to_sexp.(docs loc_at ast)
+  and warnings_sexp = List (List.map error warnings) in
+  let sexp =
+    List
+      [
+        List [ Atom "output"; ast_sexp ];
+        List [ Atom "warnings"; warnings_sexp ];
+      ]
+  in
+  Sexplib0.Sexp.pp_hum formatter sexp;
+  Format.pp_print_flush formatter ()
+
 let test ?(location = { Loc.line = 1; column = 0 }) str =
   let dummy_filename = "f.ml" in
   let location =

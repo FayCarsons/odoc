@@ -80,12 +80,24 @@ let offset_to_location :
   scan_to_last_newline reversed_newlines
 
 module Tester = struct
+  type input = Lexer.input = {
+    file : string;
+    offset_to_location : int -> Loc.point;
+    mutable warnings : Warning.t list;
+  }
+
   type token = Parser.token
-  let token = 
-    let dummy_loc = 
-      Lexer.{ warnings = []; file = "f.ml" ; offset_to_location = Fun.const Loc.{ line = 1; column = 0} } in
-    Lexer.token dummy_loc
-  let parse = Parser.main
+  let token = Lexer.token
+  let unwrap = Loc.value
+  let dummy_loc =
+    Lexer.
+      {
+        warnings = [];
+        file = "f.ml";
+        offset_to_location = Fun.const Loc.{ line = 1; column = 0 };
+      }
+
+  let parse = Parser_driver.run_parser
   let string_of_token = Describe.describe
 end
 
@@ -113,28 +125,43 @@ let position_of_point : t -> Loc.point -> Lexing.position =
 let parse_comment ~location ~text =
   let reversed_newlines = reversed_newlines ~input:text in
   let lexbuf = Lexing.from_string text in
-  (* We cannot directly pass parameters to Menhir without converting our parser 
+  (* We cannot directly pass parameters to Menhir without converting our parser
      to a module functor. So we pass our current filename to the lexbuf here *)
-  lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = Lexing.(location.pos_fname) };
-  let lexer_state = 
+  lexbuf.lex_curr_p <-
+    { lexbuf.lex_curr_p with pos_fname = Lexing.(location.pos_fname) };
+  let lexer_state =
     (* Here? *)
-    Lexer.{ warnings = []
-          ; offset_to_location = offset_to_location ~reversed_newlines ~comment_location:location
-          ; file = Lexing.(location.pos_fname) } 
+    Lexer.
+      {
+        warnings = [];
+        offset_to_location =
+          offset_to_location ~reversed_newlines ~comment_location:location;
+        file = Lexing.(location.pos_fname);
+      }
   in
   (* Remove the `Loc.with_location` wrapping our token because Menhir cannot handle that *)
-  let unwrapped_token lexbuf = 
+  let unwrapped_token lexbuf =
     let Loc.{ location; value = token } = Lexer.token lexer_state lexbuf in
-    Lexing.set_position lexbuf Lexing.{ lexbuf.lex_curr_p with pos_lnum = location.end_.line; pos_cnum = location.end_.column };
+    Lexing.set_position lexbuf
+      Lexing.
+        {
+          lexbuf.lex_curr_p with
+          pos_lnum = location.end_.line;
+          pos_cnum = location.end_.column;
+        };
     Printf.printf "Token: %s\nStart: (%d, %d) End: (%d, %d)\n\n"
-    (Describe.describe token) 
-    location.start.line location.start.column
-    location.end_.line location.end_.column;
-    
+      (Describe.describe token) location.start.line location.start.column
+      location.end_.line location.end_.column;
+
     token
   in
   let ast = Parser.main unwrapped_token lexbuf in
-  { ast; warnings = lexer_state.warnings; reversed_newlines; original_pos = location }
+  {
+    ast;
+    warnings = lexer_state.warnings;
+    reversed_newlines;
+    original_pos = location;
+  }
 
 (* Accessor functions, as [t] is opaque *)
 let warnings t = t.warnings

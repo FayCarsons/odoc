@@ -29,23 +29,7 @@
   | Canonical _ -> "@canonical"
   | Inline | Open | Closed | Hidden -> "<internal>"
 
-  type unimplemented = Top_level_error 
-  exception Debug of unimplemented Loc.with_location  
-  let _ = Printexc.register_printer (function
-    | Debug unimplemented_token_with_location -> 
-      begin
-        let Loc.{ location = _location; value = token } = unimplemented_token_with_location in 
-        let error_message = match token with 
-          | Top_level_error -> "Error in Parser.main rule"
-        in
-        Option.some @@ Printf.sprintf "Parser failed on: %s" error_message
-      end 
-    | _ -> None
-  )
   exception No_children of string Loc.with_location
-
-  let exn_location : only_for_debugging:lexspan -> failed_on:unimplemented -> exn = 
-    fun ~only_for_debugging:loc ~failed_on  -> Debug (wrap_location loc failed_on)  
 
   let tag : Ast.tag -> Ast.block_element = fun tag -> `Tag tag 
 
@@ -221,10 +205,8 @@ let main :=
   | ~ = located(toplevel)+; END; <>
   | _ = whitespace; END; { [] }
   | END; { [] }
-  (* TODO: replace w/ real error handling *)
-  | error; { raise @@ exn_location ~only_for_debugging:$loc ~failed_on:Top_level_error }
 
-let toplevel :=
+let toplevel ==
   | ~ = tag; whitespace*; <>
   | block = nestable_block_element; whitespace*; { (block :> Ast.block_element) }
   | ~ = heading; whitespace*; <>
@@ -273,7 +255,9 @@ let ref :=
   | ref_body = located(Simple_ref); children = located(inline_element)*; 
     { `Reference (`Simple, ref_body, children) }
 
-  | ref_body = located(Ref_with_replacement); children = located(inline_element)*; 
+  | ref_body = located(Ref_with_replacement); 
+    children = located(inline_element)*; 
+    RIGHT_BRACE; 
     { `Reference (`With_text, ref_body, children) }
 
 let link := 
@@ -316,7 +300,7 @@ let row_light := ~ = cell_light+; BAR?; NEWLINE; <>  (* Ast.row *)
 (* NOTE: (@FayCarsons) Presently, behavior is to 'recover' when we have an invalid align row. Is this what we want? *)
 let table_light :=
   (* If the first row is the alignment row then the rest should be data *)
-  | TABLE_LIGHT; align = row_light; data = row_light+; RIGHT_BRACE;
+  | TABLE_LIGHT; align = row_light; data = row_light+; whitespace?; RIGHT_BRACE;
     {
       let data = List.map as_data data in
       match valid_align_row align with
@@ -328,7 +312,8 @@ let table_light :=
     }
 
   (* Otherwise the first should be the headers, the second align, and the rest data *)
-  | TABLE_LIGHT; header = row_light; align = row_light; data = row_light+; RIGHT_BRACE;
+  | TABLE_LIGHT; header = row_light; align = row_light; data = row_light+;
+    whitespace?; RIGHT_BRACE;
     { 
       let data = List.map as_data data 
       and header = as_header header in
@@ -342,7 +327,7 @@ let table_light :=
     }
 
   (* If there's only one row and it's not the align row, then it's data *)
-  | TABLE_LIGHT; data = row_light+; RIGHT_BRACE; 
+  | TABLE_LIGHT; data = row_light+; whitespace?; RIGHT_BRACE; 
     { (List.map as_data data, None), `Light }
 
   (* If there's nothing inside, return an empty table *)

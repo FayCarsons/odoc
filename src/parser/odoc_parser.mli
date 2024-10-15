@@ -20,9 +20,21 @@ module Ast = Ast
 module Loc = Loc
 
 module Tester : sig
+  type input = Lexer.input = {
+    file : string;
+    offset_to_location : int -> Loc.point;
+    mutable warnings : Warning.t list;
+  }
+
   type token
-  val token : Lexing.lexbuf -> token Loc.with_location
-  val parse : (Lexing.lexbuf -> token) -> Lexing.lexbuf -> Ast.t
+  val token : input -> Lexing.lexbuf -> token Loc.with_location
+  val dummy_loc : input
+  val unwrap : token Loc.with_location -> token
+  val parse :
+    starting_location:Lexing.position ->
+    next_token:(unit -> token * Lexing.position * Lexing.position) ->
+    push_warning:(Warning.t -> unit) ->
+    Ast.t
   val string_of_token : token -> string
 end
 
