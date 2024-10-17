@@ -233,7 +233,7 @@ let inline_element :=
   | ~ = Word; <`Word>
   | ~ = Code_span; <`Code_span>
   | ~ = Raw_markup; <`Raw_markup>
-  | style = Style; inner = located(inline_element)*; RIGHT_BRACE; { `Styled (style, inner) }
+  | style = Style; inner = located(inline_element)+; RIGHT_BRACE; { `Styled (style, inner) }
   | math = Math_span; 
     {
       let start, end_ = $loc(math) in

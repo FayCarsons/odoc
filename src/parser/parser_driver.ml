@@ -6,14 +6,21 @@ let unreachable s = failwith @@ Printf.sprintf "UNREACHABLE BRANCH IN %s\n" s
 
 module Context : sig
   type with_position = Parser.token * Lexing.position * Lexing.position
+
   type 'a t = {
     file : string;
     last_valid : 'a Interpreter.checkpoint;
-    current : focus option;
+    current_symbol : context option;
     push_warning : Warning.t -> unit;
     tokens : with_position list;
   }
-  and focus = Main | Inline | Block | Tag
+  and context =
+    | Main
+    | Block of block_elt option
+    | Tag of tag_elt option
+    | Heading
+  and block_elt = A
+  and tag_elt = B
 
   val create :
     file:string ->
@@ -33,14 +40,21 @@ end = struct
   let ( >>= ) = Option.bind
 
   type with_position = Parser.token * Lexing.position * Lexing.position
+
   type 'a t = {
     file : string;
     last_valid : 'a checkpoint;
-    current : focus option;
+    current_symbol : context option;
     push_warning : Warning.t -> unit;
     tokens : with_position list;
   }
-  and focus = Main | Inline | Block | Tag
+  and context =
+    | Main
+    | Block of block_elt option
+    | Tag of tag_elt option
+    | Heading
+  and block_elt = A
+  and tag_elt = B
 
   let create (type a) ~(file : string) ~(push_warning : Warning.t -> unit)
       ~(first_checkpoint : a checkpoint) =
@@ -48,7 +62,7 @@ end = struct
       file;
       push_warning;
       last_valid = first_checkpoint;
-      current = None;
+      current_symbol = None;
       tokens = [];
     }
 
@@ -61,30 +75,22 @@ end = struct
     | HandlingError _ -> "Handling error"
     | Rejected -> "Rejected"
 
-  let string_of_focus : focus option -> string = function
-    | Some Main -> "Comment"
-    | Some Inline -> "Inline element"
-    | Some Block -> "Block element"
-    | Some Tag -> "Tag element"
-    | None -> "No match"
+  let string_of_context : context option -> string = function
+    | Some Main -> "Main"
+    | Some (Block _) -> "Block element"
+    | Some (Tag _) -> "Tag element"
+    | Some Heading -> "Header"
+    (* This is equivalent to matching on `None` as we are only using a subset of
+       the `nonterminal` type *)
+    | _ -> "No matches"
 
   let push_token self token = { self with tokens = token :: self.tokens }
-  let peek :
-      type a. a t -> (Parser.token * Lexing.position * Lexing.position) option =
-    function
+  let peek : type a. a t -> with_position option = function
     | { tokens = x :: _; _ } -> Some x
     | _ -> None
 
   let to_string self =
-    let current =
-      Option.map
-        (function
-          | Main -> "Main"
-          | Inline -> "Inline"
-          | Block -> "Block"
-          | Tag -> "Tag")
-        self.current
-      |> Option.value ~default:"Haven't matched symbol"
+    let current = string_of_context self.current_symbol
     and most_recent_token =
       let token =
         Option.map (fun (t, _, _) -> Describe.describe t) (peek self)
@@ -95,29 +101,26 @@ end = struct
       (pp_checkpoint self.last_valid)
       current most_recent_token
 
-  let get_focus_element : type a. a nonterminal -> focus option = function
-    | N_main -> Some Main
-    | N_inline_element -> Some Inline
-    | N_nestable_block_element -> Some Block
-    | N_tag -> Some Tag
-    | _ -> None
-
   let get_focus (production, _) =
     match lhs production with
-    | X (N nonterminal_symbol) -> get_focus_element nonterminal_symbol
+    | X (N N_main) -> Some Main
+    | X (N N_nestable_block_element) -> Some (Block None)
+    | X (N N_tag) -> Some (Tag None)
+    | X (N N_heading) -> Some Heading
     | _ -> None
 
   let update_focus self = function
-    | Shifting (before, _after, _not_finished) ->
-        top before
-        >>= (function
-              | Element (state, _, _, _) ->
-                  List.find_map get_focus (items state))
-        >>= (fun elt -> Some { self with current = Some elt })
-        |> Option.value ~default:self
+    | Shifting (_before, after, _not_finished_parsing) -> (
+        match stack after with
+        | (lazy (Cons (Interpreter.Element (state, _, _, _), _))) ->
+            List.find_map get_focus (items state)
+            >>= (fun elt -> Some { self with current_symbol = Some elt })
+            |> Option.value ~default:self
+        | (lazy Nil) -> self)
     | _ -> self
 
-  let context_string : 'a t -> string = fun self -> string_of_focus self.current
+  let context_string : 'a t -> string =
+   fun self -> string_of_context self.current_symbol
 end
 
 let make_span :
@@ -138,27 +141,6 @@ let make_span :
         { line = end_pos.pos_lnum; column = end_pos.pos_cnum - end_pos.pos_bol };
     }
 
-(*-----------------------------------------------------------------------------*)
-
-let keep_predictions acc (production, focus) =
-  if focus < List.length (Interpreter.rhs production) then
-    Interpreter.lhs production :: acc
-  else acc
-
-let _find_context (env : 'a Interpreter.env) =
-  let not_empty (Interpreter.Element (state, _, _, _)) =
-    Interpreter.items state |> List.fold_left keep_predictions []
-  in
-  let rec find env =
-    let items = Option.map not_empty (Interpreter.top env) in
-    match items with
-    | Some [] ->
-        Option.map find (Interpreter.pop env) |> Option.value ~default:[]
-    | Some xs -> xs
-    | _ -> []
-  in
-  find env
-
 let dummy_table : Ast.table = (([ [] ], None), `Light)
 let dummy_inline_element : Ast.inline_element = `Word ""
 
@@ -166,16 +148,17 @@ let dummy_inline_element : Ast.inline_element = `Word ""
    inserted in place of the invalid element *)
 let dummy_node (type a) (_context : a Context.t) = assert false
 
-let how_many_times = ref 0
+let how_many_times = ref 1
 
 let contextual_error_message (type a b) ~(context : a Context.t)
     ~(checkpoint : a Interpreter.checkpoint)
     ~(continuation : a Interpreter.checkpoint -> Ast.t) =
-  incr how_many_times;
   Printf.printf "We have traversed the error branch of the program %d times\n"
     !how_many_times;
+  incr how_many_times;
+
   match checkpoint with
-  | Interpreter.InputNeeded env | Interpreter.HandlingError env ->
+  | Interpreter.HandlingError env ->
       let offending_token = Context.peek context in
       (match offending_token with
       | Some ((Parser.Paragraph_style _ as token), start_pos, end_pos) ->
@@ -199,19 +182,8 @@ let contextual_error_message (type a b) ~(context : a Context.t)
           Interpreter.(N N_inline_element)
           start_pos dummy_inline_element end_pos env
       in
-      (* TODO: THIS SEGFAULTS with the current light-table example I am feeding
-          it. I think that's because when it encounters the '}' token it believes
-          it should be reducing to an Ast.inline_element but I replace it with an
-          Ast.table
 
-         Ok I think I've verified the above, so what we need to do here is
-         essentially determine which outer nonterminal symbol(I.E.
-         Inline element, block element, tag) we're currently inside of and
-         instead of returning to the current checkpoint, return to the checkpoint
-         where we matched on that symbol with a dummy AST node?
-
-         is there a way to verify this?
-      *)
+      (* NOTE: SEGFAULTS HERE *)
       let checkpoint = Interpreter.input_needed env in
       continuation checkpoint
   | _ -> unreachable "contextual_error_message"
