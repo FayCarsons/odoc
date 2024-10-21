@@ -3,6 +3,7 @@ open Parser
 module Engine = MenhirInterpreter
 
 let unreachable s = failwith @@ Printf.sprintf "UNREACHABLE BRANCH IN %s\n" s
+let unhandled s = failwith @@ Printf.sprintf "UNHANDLED BRANCH IN %s\n" s
 
 module Context : sig
   type with_position = Parser.token * Lexing.position * Lexing.position
@@ -31,6 +32,8 @@ module Context : sig
   val push_token : 'a t -> with_position -> 'a t
   val peek : 'a t -> with_position option
   val pop : 'a t -> with_position option * 'a t
+  val tokens : 'a t -> with_position list
+
   val update_focus : 'a t -> 'b Engine.checkpoint -> 'a t
 
   val context_string : 'a t -> string
@@ -96,6 +99,8 @@ end = struct
     | { tokens = x :: xs; _ } as self -> (Some x, { self with tokens = xs })
     | self -> (None, self)
 
+  let tokens : 'a t -> with_position list = fun self -> self.tokens
+
   let to_string : 'a t -> string =
    fun self ->
     let current = string_of_context self.current_symbol
@@ -148,13 +153,6 @@ let make_span :
         { line = end_pos.pos_lnum; column = end_pos.pos_cnum - end_pos.pos_bol };
     }
 
-let dummy_table : Ast.table = (([ [] ], None), `Light)
-let dummy_inline_element : Ast.inline_element = `Word ""
-
-(* This needs to be a big match where we construct the AST node which will be
-   inserted in place of the invalid element *)
-let dummy_node (type a) (_context : a Context.t) = assert false
-
 (* Constructing error messages *)
 
 let warn_if_after_text :
@@ -189,10 +187,74 @@ let warn_because_not_at_top_level :
        ~suggestion location
 
 let element_cant_be_empty : Parser.token -> bool = function
-  | Simple_link _ | Link_with_replacement _ | Ref_with_replacement _ -> true
+  | Simple_link _ | Link_with_replacement _ | Ref_with_replacement _
+  | Tag (Author _)
+  | Tag (Since _)
+  | Tag (Version _)
+  | Tag (Canonical _)
+  | Verbatim _ | Math_span _ | Code_block _ | Modules _ | List _
+  | Section_heading _ ->
+      true
   | _ -> false
 
 let how_many_times = ref 1
+
+(* Both of these need to be big matches where we get the `dummy` element and the
+   corresponding symbol, respectively *)
+let get_dummy_node : type a. Parser.token -> a = function _ -> assert false
+let get_nonterminal_symbol : type a. Parser.token -> a Engine.symbol =
+  assert false
+
+type 'a error =
+  | Recoverable of Warning.t * 'a * 'a Engine.symbol
+  | No_hope_DEBUG
+
+(* What can I do to make this function not horrific? Right now it's on track to
+   get _huge_ *)
+let semantic_error : type a. a Context.t -> Context.with_position -> a error =
+ fun context (offending_token, start_pos, end_pos) ->
+  match offending_token with
+  | Parser.RIGHT_BRACE -> (
+      let tokens = Context.tokens context in
+      match tokens with
+      | _offending :: (last_valid, last_start_pos, _last_end_pos) :: _
+        when element_cant_be_empty last_valid ->
+          let warning =
+            Parse_error.should_not_be_empty
+              ~what:(Describe.describe last_valid)
+              (make_span ~file:context.file ~start_pos:last_start_pos ~end_pos)
+          in
+          let dummy_node = get_dummy_node last_valid in
+          let nonterminal = get_nonterminal_symbol last_valid in
+          Recoverable (warning, dummy_node, nonterminal)
+      | _ -> No_hope_DEBUG)
+  | Parser.Paragraph_style _ as token ->
+      let span = make_span ~file:context.file ~start_pos ~end_pos in
+      let warning =
+        Parse_error.markup_should_not_be_used ~what:(Describe.describe token)
+          span
+      in
+      let dummy_node = get_dummy_node token in
+      let nonterminal = get_nonterminal_symbol token in
+      Recoverable (warning, dummy_node, nonterminal)
+  | Parser.END as token ->
+      let span = make_span ~file:context.file ~start_pos ~end_pos in
+      let warning =
+        Parse_error.not_allowed ~what:(Describe.describe token)
+          ~in_what:(Context.context_string context)
+          span
+      in
+      let dummy_node = get_dummy_node token in
+      let nonterminal = get_nonterminal_symbol token in
+      Recoverable (warning, dummy_node, nonterminal)
+  | _ -> unhandled "semantic_error"
+
+(*
+
+foo -> OPENING CONTENT CLOSING
+OPENING CLOSING
+
+*)
 
 let contextual_error_message :
     type a b.
@@ -206,33 +268,22 @@ let contextual_error_message :
   incr how_many_times;
 
   match checkpoint with
-  | Engine.HandlingError env ->
+  | Engine.HandlingError env -> (
       let offending_token = Context.peek context in
-      (match offending_token with
-      | Some ((Parser.Paragraph_style _ as token), start_pos, end_pos) ->
-          context.push_warning
-          @@ Parse_error.markup_should_not_be_used
-               ~what:(Describe.describe token)
-               (make_span ~file:context.file ~start_pos ~end_pos)
-      | Some (Parser.END, start_pos, end_pos) ->
-          context.push_warning
-          @@ Parse_error.not_allowed
-               ~what:(Describe.describe Parser.END)
-               ~in_what:(Context.context_string context)
-               (make_span ~file:context.file ~start_pos ~end_pos)
-      | _ ->
-          Printf.printf "UNHANDLED ERROR CASE!\nCONTEXT: %s\n%!"
-            (Context.to_string context));
-      let _, start_pos, end_pos = List.hd context.tokens in
-      print_endline "Got position from context";
-      let env =
-        Engine.feed
-          Engine.(N N_inline_element)
-          start_pos dummy_inline_element end_pos env
-      in
-      (* NOTE: SEGFAULTS HERE *)
-      let checkpoint = Engine.input_needed env in
-      continue checkpoint
+      match offending_token with
+      | Some ((_, start_pos, end_pos) as with_position) ->
+          let[@warning "-8"] (Recoverable (warning, dummy_node, nonterminal)) =
+            semantic_error context with_position
+          in
+          context.push_warning warning;
+          let env = Engine.feed nonterminal start_pos dummy_node end_pos env in
+          (* NOTE: SEGFAULTS HERE *)
+          let checkpoint = Engine.input_needed env in
+          continue checkpoint
+      | None ->
+          (* Input can't be invalid if there aren't any
+             tokens: something has gone horribly wrong *)
+          assert false)
   | _ -> unreachable "contextual_error_message"
 
 let run_parser :
