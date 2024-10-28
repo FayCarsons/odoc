@@ -4,6 +4,14 @@
  (modules parser)
  (flags --explain --inspection --table --dump))
 
+(rule
+ (targets parser_messages.ml)
+ (deps parser.messages parser.mly)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run menhir --list-errors --compile-errors %{deps}))))
+
 (library
  (name odoc_parser)
  (public_name odoc-parser)

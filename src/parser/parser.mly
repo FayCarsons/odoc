@@ -249,7 +249,7 @@ let ref :=
     { `Reference (`Simple, ref_body, children) }
 
   | ref_body = located(Ref_with_replacement); 
-    children = located(inline_element)*; 
+    children = located(inline_element)+; 
     RIGHT_BRACE;
     { `Reference (`With_text, ref_body, children) }
 

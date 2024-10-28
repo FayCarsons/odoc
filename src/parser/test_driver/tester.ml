@@ -65,6 +65,8 @@ let documentation_cases =
 let error_recovery =
   [ ("Stray at", "@"); ("Empty ref", "{!}"); ("Unmatched paren", "{!(.*()}") ]
 
+let message_api = [ ("Stray table", "{t"); ("Empty style", "{i}") ]
+
 let print_token_list tokens =
   print_endline "Tokens: ";
   List.rev tokens
@@ -98,9 +100,16 @@ let run_test ?(print_tokens = false) (label, case) =
     Format.printf "%a\n" Test.output (ast, warnings);
     print_newline ();
     print_endline "SUCCESSFUL\n\n"
-  with Failure reason ->
-    Printf.printf "case \'%s\' failed: %s\n\n" label reason;
-    if print_tokens then print_token_list !token_buf
+  with
+  | Failure reason ->
+      Printf.printf "case \'%s\' failed: %s\n\n" label reason;
+      if print_tokens then print_token_list !token_buf
+  | exc ->
+      Option.iter
+        (fun reason ->
+          Printf.printf "case \'%s\' failed: %s\n\n" label reason;
+          if print_tokens then print_token_list !token_buf)
+        (Printexc.use_printers exc)
 
 let () =
   let cases =
@@ -109,6 +118,7 @@ let () =
       | "code" -> code_cases
       | "doc" -> documentation_cases
       | "errors" -> error_recovery
+      | "messages" -> message_api
       | _ ->
           print_endline "unrecognized argument - running error cases";
           documentation_cases)

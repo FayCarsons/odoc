@@ -2,8 +2,8 @@ open Parser
 
 module Engine = MenhirInterpreter
 
-let unreachable s = failwith @@ Printf.sprintf "UNREACHABLE BRANCH IN %s\n" s
-let unhandled s = failwith @@ Printf.sprintf "UNHANDLED BRANCH IN %s\n" s
+let unreachable s = failwith @@ Printf.sprintf "UNREACHABLE BRANCH IN %s\n%!" s
+let unhandled s = failwith @@ Printf.sprintf "UNHANDLED BRANCH IN %s\n%!" s
 
 module Context : sig
   type with_position = Parser.token * Lexing.position * Lexing.position
@@ -199,12 +199,6 @@ let element_cant_be_empty : Parser.token -> bool = function
 
 let how_many_times = ref 1
 
-(* Both of these need to be big matches where we get the `dummy` element and the
-   corresponding symbol, respectively *)
-let get_dummy_node : type a. Parser.token -> a = function _ -> assert false
-let get_nonterminal_symbol : type a. Parser.token -> a Engine.symbol =
-  assert false
-
 type 'a error =
   | Recoverable of Warning.t * 'a * 'a Engine.symbol
   | No_hope_DEBUG
@@ -263,7 +257,7 @@ let contextual_error_message :
     continue:(a Engine.checkpoint -> Ast.t) ->
     Ast.t =
  fun ~context ~checkpoint ~continue ->
-  Printf.printf "We have traversed the error branch of the program %d times\n"
+  Printf.printf "We have traversed the error branch of the program %d times\n%!"
     !how_many_times;
   incr how_many_times;
 

@@ -1,0 +1,14 @@
+TABLE_LIGHT END
+##
+
+Stray '{t'
+
+Style RIGHT_BRACE
+##
+
+'Style' should not be empty
+
+Ref_with_replacement RIGHT_BRACE
+##
+
+'Ref' should not be empty
