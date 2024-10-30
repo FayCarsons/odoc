@@ -209,7 +209,7 @@ let reference_token media start target input lexbuf =
        | "{{video:" -> Link target, Video
        | _ -> assert false
      in
-     let token_descr = Describe.describe (Media_with_replacement (target, kind, "")) in
+     let token_descr = Token.describe (Media_with_replacement (target, kind, "")) in
      let content = media token_descr (Buffer.create 1024) 0 (Lexing.lexeme_start lexbuf) input lexbuf in
      Media_with_replacement (target, kind, content)
 
@@ -487,8 +487,8 @@ and token input = parse
           input
           ~start_offset:(Lexing.lexeme_end lexbuf)
           (Parse_error.not_allowed
-            ~what:(Describe.describe END)
-            ~in_what:(Describe.describe token));
+            ~what:(Token.describe END)
+            ~in_what:(Token.describe token));
       emit lexbuf input token }
 
   | "{ul"
@@ -623,8 +623,8 @@ and token input = parse
         input
         ~start_offset:(Lexing.lexeme_end lexbuf)
         (Parse_error.not_allowed
-          ~what:(Describe.describe END)
-          ~in_what:(Describe.describe (Modules "")));
+          ~what:(Token.describe END)
+          ~in_what:(Token.describe (Modules "")));
       emit lexbuf input (Modules modules) }
 
 and code_span buffer nesting_level start_offset input = parse
@@ -649,8 +649,8 @@ and code_span buffer nesting_level start_offset input = parse
         lexbuf
         input
         (Parse_error.not_allowed
-          ~what:(Describe.describe (Blank_line "\n\n"))
-          ~in_what:(Describe.describe (Code_span "")));
+          ~what:(Token.describe (Blank_line "\n\n"))
+          ~in_what:(Token.describe (Code_span "")));
       Buffer.add_char buffer ' ';
       code_span buffer nesting_level start_offset input lexbuf }
   | newline horizontal_space*
@@ -662,8 +662,8 @@ and code_span buffer nesting_level start_offset input = parse
         lexbuf
         input
         (Parse_error.not_allowed
-          ~what:(Describe.describe END)
-          ~in_what:(Describe.describe (Code_span "")));
+          ~what:(Token.describe END)
+          ~in_what:(Token.describe (Code_span "")));
       emit lexbuf input (Code_span (Buffer.contents buffer)) ~start_offset }
 
   | _ as c
@@ -693,8 +693,8 @@ and math kind buffer nesting_level start_offset input = parse
           lexbuf
           input
           (Parse_error.not_allowed
-            ~what:(Describe.describe (Blank_line "\n"))
-            ~in_what:(Describe.describe (math_constr kind "")));
+            ~what:(Token.describe (Blank_line "\n"))
+            ~in_what:(Token.describe (math_constr kind "")));
         Buffer.add_char buffer '\n';
         math kind buffer nesting_level start_offset input lexbuf
       | Block ->
@@ -706,8 +706,8 @@ and math kind buffer nesting_level start_offset input = parse
         lexbuf
         input
         (Parse_error.not_allowed
-          ~what:(Describe.describe END)
-          ~in_what:(Describe.describe (math_constr kind "")));
+          ~what:(Token.describe END)
+          ~in_what:(Token.describe (math_constr kind "")));
       emit lexbuf input (math_constr kind (Buffer.contents buffer)) ~start_offset }
   | _ as c
     { Buffer.add_char buffer c;
@@ -733,7 +733,7 @@ and media tok_descr buffer nesting_level start_offset input = parse
         lexbuf
         input
         (Parse_error.not_allowed
-          ~what:(Describe.describe END)
+          ~what:(Token.describe END)
           ~in_what:tok_descr);
       Buffer.contents buffer}
   | (newline)
@@ -760,8 +760,8 @@ and verbatim buffer last_false_terminator start_offset input = parse
           lexbuf
           input
           (Parse_error.not_allowed
-            ~what:(Describe.describe END)
-            ~in_what:(Describe.describe (Verbatim "")))
+            ~what:(Token.describe END)
+            ~in_what:(Token.describe (Verbatim "")))
       | Some location ->
         warning
           lexbuf

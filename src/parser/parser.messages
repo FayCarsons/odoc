@@ -1,14 +1,17 @@
-TABLE_LIGHT END
-##
+main: TABLE_LIGHT END
 
-Stray '{t'
+Stray '$0'
 
-Style RIGHT_BRACE
-##
+main: Style RIGHT_BRACE
+main: Ref_with_replacement RIGHT_BRACE
+main: Simple_link RIGHT_BRACE
+main: Link_with_replacement RIGHT_BRACE
 
-'Style' should not be empty
+[$0 EMPTY_INLINE] should not be empty
 
-Ref_with_replacement RIGHT_BRACE
-##
+main: Style _ [! RIGHT_BRACE]
+[$0 MISSING '}'] 
 
-'Ref' should not be empty
+List Blank_line
+
+$1 cannot be inside $0

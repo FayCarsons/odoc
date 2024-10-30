@@ -31,6 +31,7 @@ module Tester : sig
   val dummy_loc : input
   val unwrap : token Loc.with_location -> token
   val parse :
+    input_text:string ->
     starting_location:Lexing.position ->
     next_token:(unit -> token * Lexing.position * Lexing.position) ->
     push_warning:(Warning.t -> unit) ->

@@ -98,7 +98,7 @@ module Tester = struct
       }
 
   let parse = Parser_driver.run_parser
-  let string_of_token = Describe.describe
+  let string_of_token = Token.describe
 end
 
 (* Given a Loc.point and the result of [parse_comment], this function returns
@@ -150,7 +150,7 @@ let parse_comment ~location ~text =
           pos_cnum = location.end_.column;
         };
     Printf.printf "Token: %s\nStart: (%d, %d) End: (%d, %d)\n\n"
-      (Describe.describe token) location.start.line location.start.column
+      (Token.describe token) location.start.line location.start.column
       location.end_.line location.end_.column;
 
     token

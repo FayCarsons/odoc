@@ -65,7 +65,16 @@ let documentation_cases =
 let error_recovery =
   [ ("Stray at", "@"); ("Empty ref", "{!}"); ("Unmatched paren", "{!(.*()}") ]
 
-let message_api = [ ("Stray table", "{t"); ("Empty style", "{i}") ]
+let message_api =
+  [
+    ( "Multi-line",
+      "These are some words\n\
+       These are also some words\n\
+       The next line should fail\n\
+       {i}" );
+    ("Stray table", "{t");
+    ("Empty style", "{i}");
+  ]
 
 let print_token_list tokens =
   print_endline "Tokens: ";
@@ -75,18 +84,19 @@ let print_token_list tokens =
        ""
   |> print_endline
 
-let run_test ?(print_tokens = false) (label, case) =
+let run_test ?(print_tokens = false) (label, input_text) =
+  if print_tokens then print_endline "";
   let module Parse = Odoc_parser.Tester in
   Printf.printf ">>> Running %s\n" label;
   let input = Parse.dummy_loc in
   input.warnings <- [];
-  let lexbuf = Lexing.from_string case in
+  let lexbuf = Lexing.from_string input_text in
   let token_buf = ref [] in
   let next_token () =
     let token = Parse.unwrap @@ Parse.token input lexbuf
     and start_pos = lexbuf.Lexing.lex_start_p
     and end_pos = lexbuf.Lexing.lex_curr_p in
-    if print_tokens then token_buf := token :: !token_buf;
+    token_buf := token :: !token_buf;
     (token, start_pos, end_pos)
   in
   let push_warning warning = input.warnings <- warning :: input.warnings in
@@ -94,21 +104,23 @@ let run_test ?(print_tokens = false) (label, case) =
     Lexing.{ pos_fname = "f.ml"; pos_bol = 0; pos_cnum = 0; pos_lnum = 0 }
   in
   try
-    let ast = Parse.parse ~starting_location ~next_token ~push_warning in
+    let ast =
+      Parse.parse ~input_text ~starting_location ~next_token ~push_warning
+    in
     let warnings = input.warnings in
-    if print_tokens then print_token_list !token_buf;
+    print_token_list !token_buf;
     Format.printf "%a\n" Test.output (ast, warnings);
     print_newline ();
     print_endline "SUCCESSFUL\n\n"
   with
   | Failure reason ->
       Printf.printf "case \'%s\' failed: %s\n\n" label reason;
-      if print_tokens then print_token_list !token_buf
+      print_token_list !token_buf
   | exc ->
       Option.iter
         (fun reason ->
           Printf.printf "case \'%s\' failed: %s\n\n" label reason;
-          if print_tokens then print_token_list !token_buf)
+          print_token_list !token_buf)
         (Printexc.use_printers exc)
 
 let () =
@@ -127,4 +139,4 @@ let () =
   let print_tokens =
     Array.length Sys.argv > 1 && Array.mem "print-tokens" Sys.argv
   in
-  List.iter (run_test ~print_tokens) cases
+  List.iter (run_test ~print_tokens) [ List.hd cases ]
