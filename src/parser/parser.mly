@@ -1,58 +1,9 @@
 %{
   open Parser_aux
 
-  let point_of_position Lexing.{ pos_lnum; pos_cnum;  _ } = 
-      Loc.{ line = pos_lnum; column = pos_cnum  }
-
-  type lexspan = (Lexing.position * Lexing.position)
-  let to_location :  lexspan -> Loc.span =
-    fun (start, end_) -> 
-      let open Loc in
-      let start_point = point_of_position start 
-      and end_point = point_of_position end_ in 
-      { file = start.pos_fname; start = start_point; end_ = end_point } 
-
   let wrap_location : lexspan -> 'a -> 'a Loc.with_location = fun loc value -> 
-    let location = to_location loc in 
+    let location = Parser_aux.to_location loc in 
     { location; value }
-
-  let pp_tag : Parser_aux.tag -> string = function 
-  | Author _ -> "@author"
-  | Deprecated -> "@deprecated"
-  | Param _ -> "@param"
-  | Raise _ -> "@raise/@raises"
-  | Return -> "@return"
-  | See _ -> "@see"
-  | Since _ -> "@since"
-  | Before _ -> "@before"
-  | Version _ -> "@version"
-  | Canonical _ -> "@canonical"
-  | Inline | Open | Closed | Hidden -> "<internal>"
-
-  exception No_children of string Loc.with_location
-
-  let tag : Ast.tag -> Ast.block_element = fun tag -> `Tag tag 
-
-  let tag_with_element (children : Ast.nestable_block_element Loc.with_location list) : Parser_aux.tag -> Ast.block_element = function 
-  | Before version -> tag @@ `Before (version, children) 
-  | Deprecated -> tag @@ `Deprecated children
-  | Return -> tag @@ `Return children
-  | Param param_name -> tag @@ `Param (param_name, children)
-  | Raise exn -> tag @@ `Raise (exn, children)
-  | See (kind, href) -> tag @@ `See (kind, href, children)
-  | _ -> assert false (* Unreachable *)
-
-  let tag_bare loc = function 
-  | Version version -> tag @@ `Version version 
-  | Since version -> tag @@ `Since version 
-  | Canonical implementation -> tag @@ `Canonical (wrap_location loc implementation)
-  | Author author -> tag @@ `Author author
-  | Inline -> `Tag `Inline 
-  | Open -> `Tag `Open 
-  | Closed -> `Tag `Closed
-  | Hidden -> `Tag `Hidden
-  (* NOTE: (@FayCarsons) This should be unreachable, remove after dev *)
-  | tag -> raise @@ No_children (wrap_location loc @@ Printf.sprintf "Tag %s expects children" (pp_tag tag)) 
 
   type align_error = 
   | Invalid_align (* An invalid align cell *)
@@ -181,7 +132,18 @@
 
 %token <int * string option> Section_heading
 
-%token <Parser_aux.tag> Tag
+(* Tags *)
+%token <string> Author
+%token DEPRECATED
+%token <string> Param
+%token <string> Raise
+%token RETURN
+%token <[ `Url | `File | `Document ] * string> See
+%token <string> Since
+%token <string> Before
+%token <string> Version
+%token <string> Canonical
+%token INLINE OPEN CLOSED HIDDEN
 
 %token <string> Simple_ref 
 %token <string> Ref_with_replacement 
@@ -202,45 +164,70 @@ let located(rule) == inner = rule; { wrap_location $loc inner }
 
 (* ENTRY-POINT *)
 
+(* A comment can either contain block elements, block elements and then tags, or
+   just tags, but not tags and then block elements *)
 let main :=  
-  | ~ = located(toplevel)+; END; <>
-  | _ = whitespace; END; { [] }
+  | ~ = located(toplevel)+; whitespace*; END; <>
+  | elements = located(toplevel)+; tags = located(tag)+; whitespace*; END; 
+    { elements @ tags } 
+  | ~ = located(tag)+; whitespace*; END; <>
+  | whitespace; END; { [] }
   | END; { [] }
 
-let toplevel ==
-  | ~ = tag; whitespace*; <>
-  | block = nestable_block_element; whitespace*; { (block :> Ast.block_element) }
-  | ~ = heading; whitespace*; <>
+let toplevel :=
+  | block = nestable_block_element; { (block :> Ast.block_element) }
+  | ~ = heading; <>
 
-let whitespace := 
+let horizontal_whitespace := 
   | SPACE; { `Space " " } 
-  | NEWLINE; { `Space "\n" }
   | ~ = Space; <`Space>
   | ~ = Single_newline; <`Space>
+
+let whitespace := 
+  | horizontal_whitespace; {}
+  | NEWLINE; { () }
 
 let heading := 
   | (num, title) = Section_heading; children = list(located(inline_element)); RIGHT_BRACE; 
     { `Heading (num, title, children) }
 
-let tag := 
-  | inner_tag = Tag; children = located(nestable_block_element)+; { tag_with_element children inner_tag }
-  | inner_tag = Tag; { tag_bare $loc inner_tag }
+let tag == 
+  | ~ = tag_with_content; <`Tag>
+  | ~ = tag_bare; <`Tag>
+
+let tag_with_content := 
+  | version = Before; children = located(nestable_block_element)+; 
+    { `Before (version, children) }
+  | DEPRECATED; children = located(nestable_block_element)+; 
+    { `Deprecated children }
+  | RETURN; children = located(nestable_block_element)+;
+    { `Return children }
+  | ident = Param; children = located(nestable_block_element)+;
+    { `Param (ident, children) }
+  | exn = Raise; children = located(nestable_block_element)+;
+    { `Raise (exn, children) }
+  | (kind, href) = See; children = located(nestable_block_element)+;
+    { `See (kind, href, children) }
+
+let tag_bare :=
+  | version = Version; { `Version version }
+  | version = Since; { `Since version }
+  | impl = located(Canonical); { `Canonical impl }
+  | version = Author; { `Author version }
+  | OPEN; { `Open }
+  | INLINE; { `Inline }
+  | CLOSED; { `Closed }
+  | HIDDEN; { `Hidden }
 
 (* INLINE ELEMENTS *)
 
 let inline_element := 
-  | ~ = whitespace; <>
+  | ~ = Space; <`Space>
   | ~ = Word; <`Word>
   | ~ = Code_span; <`Code_span>
   | ~ = Raw_markup; <`Raw_markup>
   | style = Style; inner = located(inline_element)+; RIGHT_BRACE; { `Styled (style, inner) }
-  | math = Math_span; 
-    {
-      let start, end_ = $loc(math) in
-      let open Lexing in
-      Printf.printf "col start: %d, col end: %d\n" start.pos_cnum end_.pos_cnum;
-      `Math_span math 
-    }
+  | ~ = Math_span; <`Math_span>
   | ~ = ref; <>
   | ~ = link; <>
 
@@ -260,17 +247,17 @@ let link :=
 (* LIST *)
 
 let list_light := 
-  | MINUS; unordered_items = separated_list(NEWLINE; SPACE?; MINUS, located(nestable_block_element)); 
+  | MINUS; unordered_items = separated_list(NEWLINE; MINUS, located(nestable_block_element)); 
     { `List (`Unordered, `Light, [ unordered_items ]) }
 
   | PLUS; ordered_items = separated_list(NEWLINE; SPACE?; PLUS, located(nestable_block_element)); 
     { `List (`Ordered, `Light, [ ordered_items ]) }
 
 (* NOTE: (@FayCarsons) `List_item` is [ `Li | `Dash ], not sure how that's useful though. Can't find '{li' syntax in Odoc docs *)
-let item_heavy == _ = List_item; whitespace*; ~ = located(nestable_block_element)*; whitespace*; RIGHT_BRACE; whitespace*; <>
+let item_heavy == _ = List_item; whitespace*; ~ = located(nestable_block_element)+; whitespace*; RIGHT_BRACE; whitespace*; <>
 let list_heavy := 
     | list_kind = List; whitespace*; items = item_heavy*; whitespace*; RIGHT_BRACE;
-    { `List (list_kind, `Heavy, items) }
+      { `List (list_kind, `Heavy, items) }
 
 let list_element := 
   | ~ = list_light; <>
@@ -280,11 +267,7 @@ let list_element :=
 
 let cell_heavy := cell_kind = Table_cell; whitespace?; children = located(nestable_block_element)*; whitespace?; RIGHT_BRACE; whitespace?; { (children, cell_kind) }
 let row_heavy == TABLE_ROW; whitespace?; cells = list(cell_heavy); RIGHT_BRACE; whitespace?;  { cells } 
-let table_heavy == TABLE_HEAVY; whitespace?; grid = row_heavy*; RIGHT_BRACE; 
-  { 
-    let abstract = (grid, None) in 
-    (abstract, `Heavy) 
-  }
+let table_heavy == TABLE_HEAVY; whitespace?; grid = row_heavy+; RIGHT_BRACE; { ((grid, None), `Heavy) }
 
 let cell_light == BAR?; ~ = located(inline_element)+; <> (* Ast.cell *)
 let row_light := ~ = cell_light+; BAR?; NEWLINE; <>  (* Ast.row *)
