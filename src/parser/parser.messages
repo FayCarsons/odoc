@@ -9,9 +9,6 @@ main: Link_with_replacement RIGHT_BRACE
 
 [$0 EMPTY_INLINE] should not be empty
 
-main: Style _ [! RIGHT_BRACE]
-[$0 MISSING '}'] 
-
 List Blank_line
 
 $1 cannot be inside $0

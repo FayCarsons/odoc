@@ -8,41 +8,51 @@ let unhandled s = failwith @@ Printf.sprintf "UNHANDLED BRANCH IN %s\n%!" s
 
 module Context : sig
   type with_position = Parser.token * Lexing.position * Lexing.position
+  type snapshot = { state : Ast.t Engine.checkpoint; index : int }
 
-  type 'a t = {
+  type t = {
     file : string;
-    last_valid : 'a Engine.checkpoint;
+    state_stack : snapshot list;
     push_warning : Warning.t -> unit;
     tokens : with_position list;
+    token_count : int;
   }
 
   val create :
     file:string ->
     push_warning:(Warning.t -> unit) ->
-    first_checkpoint:'a Engine.checkpoint ->
-    'a t
+    first_checkpoint:Ast.t Engine.checkpoint ->
+    t
 
-  val push_token : 'a t -> with_position -> 'a t
-  val peek : 'a t -> with_position option
-  val pop : 'a t -> with_position option * 'a t
-  val tokens : 'a t -> with_position list
-
-  val to_string : 'a t -> string
+  val push_token : t -> with_position -> t
+  val peek : t -> with_position option
+  val pop : t -> with_position option * t
+  val tokens : t -> with_position list
+  val update : t -> Ast.t Engine.checkpoint -> Parser.token -> t
+  val to_string : t -> string
 end = struct
   open Engine
 
   type with_position = Parser.token * Lexing.position * Lexing.position
+  type snapshot = { state : Ast.t Engine.checkpoint; index : int }
 
-  type 'a t = {
+  type t = {
     file : string;
-    last_valid : 'a checkpoint;
+    state_stack : snapshot list;
     push_warning : Warning.t -> unit;
     tokens : with_position list;
+    token_count : int;
   }
 
-  let create (type a) ~(file : string) ~(push_warning : Warning.t -> unit)
-      ~(first_checkpoint : a checkpoint) =
-    { file; push_warning; last_valid = first_checkpoint; tokens = [] }
+  let create ~(file : string) ~(push_warning : Warning.t -> unit)
+      ~(first_checkpoint : Ast.t checkpoint) =
+    {
+      file;
+      push_warning;
+      state_stack = [ { state = first_checkpoint; index = 0 } ];
+      tokens = [];
+      token_count = 0;
+    }
 
   let pp_checkpoint = function
     | InputNeeded _ -> "Input needed (Parser needs token)"
@@ -53,27 +63,38 @@ end = struct
     | HandlingError _ -> "Handling error"
     | Rejected -> "Rejected"
 
-  let push_token : 'a t -> with_position -> 'a t =
+  let push_token : t -> with_position -> t =
    fun self token -> { self with tokens = token :: self.tokens }
 
-  let peek : 'a t -> with_position option = function
+  let peek : t -> with_position option = function
     | { tokens = x :: _; _ } -> Some x
     | _ -> None
 
-  let pop : 'a t -> with_position option * 'a t = function
+  let pop : t -> with_position option * t = function
     | { tokens = x :: xs; _ } as self -> (Some x, { self with tokens = xs })
     | self -> (None, self)
 
-  let tokens : 'a t -> with_position list = fun self -> self.tokens
+  let tokens : t -> with_position list = fun self -> self.tokens
 
-  let to_string : 'a t -> string =
+  let print_states state_stack =
+    let as_str =
+      List.map
+        (fun { state; index } ->
+          Printf.sprintf "{\nstate : %s\nindex: %d\n}\n" (pp_checkpoint state)
+            index)
+        state_stack
+      |> List.fold_left ( ^ ) ""
+    in
+    "[\n" ^ as_str ^ "]\n"
+
+  let to_string : t -> string =
    fun self ->
     let most_recent_token =
       Option.map (fun (t, _, _) -> Token.describe t) (peek self)
       |> Option.value ~default:"No tokens"
     in
     Printf.sprintf "{ checkpoint: %s; most_recent_token: %s }\n%!"
-      (pp_checkpoint self.last_valid)
+      (print_states self.state_stack)
       most_recent_token
 
   let filter_opening_token :
@@ -83,6 +104,25 @@ end = struct
     | Style _ | List _ | List_item _ | TABLE_LIGHT | TABLE_HEAVY | TABLE_ROW ->
         Some checkpoint
     | _ -> None
+
+  let update : t -> Ast.t checkpoint -> Parser.token -> t =
+   fun self checkpoint token ->
+    match filter_opening_token checkpoint token with
+    | Some checkpoint ->
+        {
+          self with
+          state_stack =
+            { state = checkpoint; index = self.token_count } :: self.state_stack;
+          token_count = succ self.token_count;
+        }
+    | None -> self
+end
+
+module Action = struct
+  type kind = Insert of int * Parser.token | Remove of int * Parser.token
+
+  let of_string : string -> t 
+    
 end
 
 let make_span :
@@ -152,8 +192,8 @@ let run_parser :
         let checkpoint = Engine.offer checkpoint token
         and context = Context.push_token context token in
         run ~context checkpoint
-    | Shifting (_before, after, _going_to_continue) as checkpoint ->
-        let context = Context.update context after in
+    | Shifting _ as checkpoint ->
+        let context = Context.update context checkpoint in
         run ~context (Engine.resume checkpoint)
     | AboutToReduce _ as checkpoint -> run ~context (resume checkpoint)
     | Rejected ->
