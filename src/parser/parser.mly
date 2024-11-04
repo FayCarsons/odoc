@@ -167,16 +167,14 @@ let located(rule) == inner = rule; { wrap_location $loc inner }
 (* A comment can either contain block elements, block elements and then tags, or
    just tags, but not tags and then block elements *)
 let main :=  
-  | ~ = located(toplevel)+; whitespace*; END; <>
-  | elements = located(toplevel)+; tags = located(tag)+; whitespace*; END; 
-    { elements @ tags } 
-  | ~ = located(tag)+; whitespace*; END; <>
+  | ~ = located(toplevel)+; END; <>
   | whitespace; END; { [] }
   | END; { [] }
 
 let toplevel :=
-  | block = nestable_block_element; { (block :> Ast.block_element) }
-  | ~ = heading; <>
+  | ~ = tag; whitespace?; <>
+  | block = nestable_block_element; whitespace?; { (block :> Ast.block_element) }
+  | ~ = heading; whitespace?; <>
 
 let horizontal_whitespace := 
   | SPACE; { `Space " " } 
@@ -185,7 +183,8 @@ let horizontal_whitespace :=
 
 let whitespace := 
   | horizontal_whitespace; {}
-  | NEWLINE; { () }
+  | NEWLINE; {}
+  | _ = Single_newline; {} 
 
 let heading := 
   | (num, title) = Section_heading; children = list(located(inline_element)); RIGHT_BRACE; 
@@ -223,6 +222,7 @@ let tag_bare :=
 
 let inline_element := 
   | ~ = Space; <`Space>
+  | SPACE; { `Space " " }
   | ~ = Word; <`Word>
   | ~ = Code_span; <`Code_span>
   | ~ = Raw_markup; <`Raw_markup>

@@ -84,28 +84,21 @@ let print_token_list tokens =
        ""
   |> print_endline
 
-let run_test ?(print_tokens = false) (label, input_text) =
-  if print_tokens then print_endline "";
+let run_test (label, input_text) =
   let module Parse = Odoc_parser.Tester in
   Printf.printf ">>> Running %s\n" label;
   let input = Parse.dummy_loc in
   input.warnings <- [];
   let lexbuf = Lexing.from_string input_text in
   let token_buf = ref [] in
-  let next_token () =
-    let token = Parse.unwrap @@ Parse.token input lexbuf
-    and start_pos = lexbuf.Lexing.lex_start_p
-    and end_pos = lexbuf.Lexing.lex_curr_p in
-    token_buf := token :: !token_buf;
-    (token, start_pos, end_pos)
-  in
   let push_warning warning = input.warnings <- warning :: input.warnings in
   let starting_location =
     Lexing.{ pos_fname = "f.ml"; pos_bol = 0; pos_cnum = 0; pos_lnum = 0 }
   in
   try
     let ast =
-      Parse.parse ~input_text ~starting_location ~next_token ~push_warning
+      Parse.parse ~input_text ~starting_location ~input:Parse.dummy_loc ~lexbuf
+        ~push_warning
     in
     let warnings = input.warnings in
     print_token_list !token_buf;
@@ -136,7 +129,4 @@ let () =
           documentation_cases)
     else documentation_cases
   in
-  let print_tokens =
-    Array.length Sys.argv > 1 && Array.mem "print-tokens" Sys.argv
-  in
-  List.iter (run_test ~print_tokens) [ List.hd cases ]
+  List.iter run_test [ List.hd cases ]

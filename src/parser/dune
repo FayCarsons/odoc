@@ -5,12 +5,10 @@
  (flags --explain --inspection --table --dump))
 
 (rule
- (targets parser_messages.ml)
- (deps parser.messages parser.mly)
  (action
   (with-stdout-to
-   %{targets}
-   (run menhir --list-errors --compile-errors %{deps}))))
+   parser_messages.ml
+   (run menhir --list-errors --compile-errors parser.messages parser.mly))))
 
 (library
  (name odoc_parser)

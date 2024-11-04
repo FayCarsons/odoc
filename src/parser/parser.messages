@@ -7,8 +7,8 @@ main: Ref_with_replacement RIGHT_BRACE
 main: Simple_link RIGHT_BRACE
 main: Link_with_replacement RIGHT_BRACE
 
-[$0 EMPTY_INLINE] should not be empty
+[Insert \s $0] $0 $0 should not be empty
 
 List Blank_line
 
-$1 cannot be inside $0
+[Insert '}' $0] $1 should not be inside $0

@@ -57,20 +57,20 @@ let print : Parser.token -> string = function
   | Section_heading (level, label) ->
       let label = match label with None -> "" | Some label -> ":" ^ label in
       Printf.sprintf "'{%i%s'" level label
-  | Tag (Author _) -> "'@author'"
-  | Tag Deprecated -> "'@deprecated'"
-  | Tag (Param _) -> "'@param'"
-  | Tag (Raise _) -> "'@raise'"
-  | Tag Return -> "'@return'"
-  | Tag (See _) -> "'@see'"
-  | Tag (Since _) -> "'@since'"
-  | Tag (Before _) -> "'@before'"
-  | Tag (Version _) -> "'@version'"
-  | Tag (Canonical _) -> "'@canonical'"
-  | Tag Inline -> "'@inline'"
-  | Tag Open -> "'@open'"
-  | Tag Closed -> "'@closed'"
-  | Tag Hidden -> "'@hidden"
+  | Author _ -> "'@author'"
+  | DEPRECATED -> "'@deprecated'"
+  | Param _ -> "'@param'"
+  | Raise _ -> "'@raise'"
+  | RETURN -> "'@return'"
+  | See _ -> "'@see'"
+  | Since _ -> "'@since'"
+  | Before _ -> "'@before'"
+  | Version _ -> "'@version'"
+  | Canonical _ -> "'@canonical'"
+  | INLINE -> "'@inline'"
+  | OPEN -> "'@open'"
+  | CLOSED -> "'@closed'"
+  | HIDDEN -> "'@hidden"
   | Raw_markup (None, _) -> "'{%...%}'"
   | Raw_markup (Some target, _) -> "'{%" ^ target ^ ":...%}'"
   | END -> "EOI"
@@ -126,78 +126,83 @@ let describe : Parser.token -> string = function
   | BAR -> "'|'"
   | Section_heading (level, _) ->
       Printf.sprintf "'{%i ...}' (section heading)" level
-  | Tag (Author _) -> "'@author'"
-  | Tag Deprecated -> "'@deprecated'"
-  | Tag (Param _) -> "'@param'"
-  | Tag (Raise _) -> "'@raise'"
-  | Tag Return -> "'@return'"
-  | Tag (See _) -> "'@see'"
-  | Tag (Since _) -> "'@since'"
-  | Tag (Before _) -> "'@before'"
-  | Tag (Version _) -> "'@version'"
-  | Tag (Canonical _) -> "'@canonical'"
-  | Tag Inline -> "'@inline'"
-  | Tag Open -> "'@open'"
-  | Tag Closed -> "'@closed'"
-  | Tag Hidden -> "'@hidden"
+  | Author _ -> "'@author'"
+  | DEPRECATED -> "'@deprecated'"
+  | Param _ -> "'@param'"
+  | Raise _ -> "'@raise'"
+  | RETURN -> "'@return'"
+  | See _ -> "'@see'"
+  | Since _ -> "'@since'"
+  | Before _ -> "'@before'"
+  | Version _ -> "'@version'"
+  | Canonical _ -> "'@canonical'"
+  | INLINE -> "'@inline'"
+  | OPEN -> "'@open'"
+  | CLOSED -> "'@closed'"
+  | HIDDEN -> "'@hidden"
 
-let same : Parser.token * Parser.token -> string = function
-  | Space _, Space _
-  | Media _, Media _
-  | Media_with_replacement _, Media_with_replacement _
-  | Word _, Word _
-  | Code_span _, Code_span _
-  | Raw_markup _, Raw_markup _
-  | Paragraph_style `Left, Paragraph_style `Left
-  | Paragraph_style `Center, Paragraph_style `Center
-  | Paragraph_style `Right, Paragraph_style `Right
-  | Style `Bold, Style `Bold
-  | Style `Italic, Style `Italic
-  | Style `Emphasis, Style `Emphasis
-  | Style `Superscript, Style `Superscript
-  | Style `Subscript, Style `Subscript
-  | Math_span _, Math_span _
-  | Math_block _, Math_block _
-  | Simple_ref _, Simple_ref _
-  | Ref_with_replacement _, Ref_with_replacement _
-  | Simple_link _, Simple_link _
-  | Link_with_replacement _, Link_with_replacement _
-  | END, END
-  | SPACE, SPACE
-  | Single_newline _, Single_newline _
-  | NEWLINE, NEWLINE
-  | Blank_line _, Blank_line _
-  | RIGHT_BRACE, RIGHT_BRACE
-  | RIGHT_CODE_DELIMITER, RIGHT_CODE_DELIMITER
-  | Code_block _, Code_block _
-  | Verbatim _, Verbatim _
-  | Modules _, Modules _
-  | List `Unordered, List `Unordered
-  | List `Ordered, List `Ordered
-  | List_item `Li, List_item `Li
-  | List_item `Dash, List_item `Dash
-  | TABLE_LIGHT, TABLE_LIGHT
-  | TABLE_HEAVY, TABLE_HEAVY
-  | TABLE_ROW, TABLE_ROW
-  | Table_cell `Header, Table_cell `Header
-  | Table_cell `Data, Table_cell `Data
-  | MINUS, MINUS
-  | PLUS, PLUS
-  | BAR, BAR
-  | Section_heading _, Section_heading _
-  | Author _, Author _
-  | DEPRECATED, DEPRECATED
-  | PARAM, PARAM
-  | Raise _, Raise _
-  | RETURN, RETURN
-  | See _, See _
-  | Since _, Since _
-  | Before _, Before _
-  | Version _, Version _
-  | Canonical _, Canonical _
-  | INLINE, INLINE
-  | OPEN, OPEN
-  | CLOSED, CLOSED
-  | HIDDEN, HIDDEN ->
-      true
-  | _ -> false
+(* Checks if two tokens are the same, but not if the values they carry are equal *)
+let same : Parser.token -> Parser.token -> bool =
+ fun left right ->
+  let go = function
+    | Space _, Space _
+    | Media _, Media _
+    | Media_with_replacement _, Media_with_replacement _
+    | Word _, Word _
+    | Code_span _, Code_span _
+    | Raw_markup _, Raw_markup _
+    | Paragraph_style `Left, Paragraph_style `Left
+    | Paragraph_style `Center, Paragraph_style `Center
+    | Paragraph_style `Right, Paragraph_style `Right
+    | Style `Bold, Style `Bold
+    | Style `Italic, Style `Italic
+    | Style `Emphasis, Style `Emphasis
+    | Style `Superscript, Style `Superscript
+    | Style `Subscript, Style `Subscript
+    | Math_span _, Math_span _
+    | Math_block _, Math_block _
+    | Simple_ref _, Simple_ref _
+    | Ref_with_replacement _, Ref_with_replacement _
+    | Simple_link _, Simple_link _
+    | Link_with_replacement _, Link_with_replacement _
+    | END, END
+    | SPACE, SPACE
+    | Single_newline _, Single_newline _
+    | NEWLINE, NEWLINE
+    | Blank_line _, Blank_line _
+    | RIGHT_BRACE, RIGHT_BRACE
+    | RIGHT_CODE_DELIMITER, RIGHT_CODE_DELIMITER
+    | Code_block _, Code_block _
+    | Verbatim _, Verbatim _
+    | Modules _, Modules _
+    | List `Unordered, List `Unordered
+    | List `Ordered, List `Ordered
+    | List_item `Li, List_item `Li
+    | List_item `Dash, List_item `Dash
+    | TABLE_LIGHT, TABLE_LIGHT
+    | TABLE_HEAVY, TABLE_HEAVY
+    | TABLE_ROW, TABLE_ROW
+    | Table_cell `Header, Table_cell `Header
+    | Table_cell `Data, Table_cell `Data
+    | MINUS, MINUS
+    | PLUS, PLUS
+    | BAR, BAR
+    | Section_heading _, Section_heading _
+    | Author _, Author _
+    | DEPRECATED, DEPRECATED
+    | Param _, Param _
+    | Raise _, Raise _
+    | RETURN, RETURN
+    | See _, See _
+    | Since _, Since _
+    | Before _, Before _
+    | Version _, Version _
+    | Canonical _, Canonical _
+    | INLINE, INLINE
+    | OPEN, OPEN
+    | CLOSED, CLOSED
+    | HIDDEN, HIDDEN ->
+        true
+    | _ -> false
+  in
+  go (left, right)

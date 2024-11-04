@@ -33,7 +33,8 @@ module Tester : sig
   val parse :
     input_text:string ->
     starting_location:Lexing.position ->
-    next_token:(unit -> token * Lexing.position * Lexing.position) ->
+    lexbuf:Lexing.lexbuf ->
+    input:Lexer.input ->
     push_warning:(Warning.t -> unit) ->
     Ast.t
   val string_of_token : token -> string
