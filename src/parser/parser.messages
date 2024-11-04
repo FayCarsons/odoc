@@ -7,7 +7,7 @@ main: Ref_with_replacement RIGHT_BRACE
 main: Simple_link RIGHT_BRACE
 main: Link_with_replacement RIGHT_BRACE
 
-[Insert \s $0] $0 $0 should not be empty
+[Insert \s $0] $0 should not be empty
 
 List Blank_line
 
