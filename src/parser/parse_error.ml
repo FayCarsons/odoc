@@ -86,3 +86,34 @@ let end_not_allowed : in_what:string -> Loc.span -> Warning.t =
  fun ~in_what ->
   Warning.make ~suggestion:"add '}'." "End of text is not allowed in %s."
     in_what
+
+(* These are errors which are not handled by the lexer. This list should be
+   expanded as we tighten things up *)
+type parser_error =
+  | End_not_allowed
+  | Should_not_be_empty
+  | Not_allowed of Parser.token
+  | Should_be_followed_by_whitespace
+  | Should_begin_line
+  | No_markup
+  | Unpaired_right_brace
+
+let make_warning :
+    ?suggestion:string ->
+    element:string ->
+    Loc.span ->
+    parser_error ->
+    Warning.t =
+ fun ?suggestion ~element:what loc self ->
+  match self with
+  | End_not_allowed -> end_not_allowed ~in_what:what loc
+  | Should_not_be_empty -> should_not_be_empty ~what loc
+  | Not_allowed offending_token ->
+      not_allowed ?suggestion
+        ~what:(Token.describe offending_token)
+        ~in_what:what loc
+  | Should_be_followed_by_whitespace ->
+      should_be_followed_by_whitespace ~what loc
+  | Should_begin_line -> should_begin_on_its_own_line ~what loc
+  | No_markup -> markup_should_not_be_used ~what loc
+  | Unpaired_right_brace -> unpaired_right_brace loc

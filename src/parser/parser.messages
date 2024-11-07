@@ -1,14 +1,969 @@
-main: TABLE_LIGHT END
+main: Table_cell                     
+##
+## Ends in an error in state: 0.
+##
+## main' -> . main [ # ]
+##
+## The known suffix of the stack is as follows:
+##
+##
 
-Stray '$0'
+[Insert } $0] End_not_allowed
 
-main: Style RIGHT_BRACE
-main: Ref_with_replacement RIGHT_BRACE
-main: Simple_link RIGHT_BRACE
-main: Link_with_replacement RIGHT_BRACE
+main: TABLE_LIGHT Version
+##
+## Ends in an error in state: 4.
+##
+##
+## The known suffix of the stack is as follows:
+## TABLE_LIGHT
+##
 
-[Insert \s $0] $0 should not be empty
+[Insert } $0] End_not_allowed
 
-List Blank_line
+main: TABLE_LIGHT SPACE Word
+##
+## Ends in an error in state: 5.
+##
+## list(SPACE) -> SPACE . list(SPACE) [ RIGHT_BRACE ]
+##
+## The known suffix of the stack is as follows:
+## SPACE
+##
 
-[Insert '}' $0] $1 should not be inside $0
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_LIGHT Simple_ref NEWLINE Version
+##
+## Ends in an error in state: 8.
+##
+## nonempty_list(row_light) -> row_light . [ Space Single_newline SPACE RIGHT_BRACE NEWLINE ]
+## nonempty_list(row_light) -> row_light . nonempty_list(row_light) [ Space Single_newline SPACE RIGHT_BRACE NEWLINE ]
+##
+## The known suffix of the stack is as follows:
+## TABLE_LIGHT row_light
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_LIGHT Simple_ref NEWLINE Simple_ref NEWLINE Version
+##
+## Ends in an error in state: 9.
+##
+## nonempty_list(row_light) -> row_light . [ Space Single_newline SPACE RIGHT_BRACE NEWLINE ]
+## nonempty_list(row_light) -> row_light . nonempty_list(row_light) [ Space Single_newline SPACE RIGHT_BRACE NEWLINE ]
+##
+## The known suffix of the stack is as follows:
+## TABLE_LIGHT row_light row_light
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_LIGHT Simple_ref NEWLINE Simple_ref NEWLINE Simple_ref NEWLINE Version
+##
+## Ends in an error in state: 10.
+##
+## nonempty_list(row_light) -> row_light . [ Space Single_newline SPACE RIGHT_BRACE NEWLINE ]
+## nonempty_list(row_light) -> row_light . nonempty_list(row_light) [ Space Single_newline SPACE RIGHT_BRACE NEWLINE ]
+##
+## The known suffix of the stack is as follows:
+## row_light
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_LIGHT BAR Version
+##
+## Ends in an error in state: 11.
+##
+## nonempty_list(cell_light) -> option(BAR) . nonempty_list(located(inline_element)) [ NEWLINE BAR ]
+## nonempty_list(cell_light) -> option(BAR) . nonempty_list(located(inline_element)) nonempty_list(cell_light) [ NEWLINE BAR ]
+##
+## The known suffix of the stack is as follows:
+## option(BAR)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Style Version
+##
+## Ends in an error in state: 12.
+##
+##
+## The known suffix of the stack is as follows:
+## Style
+##
+
+[Insert } $0] Should_not_be_empty
+
+main: Simple_ref Table_cell
+##
+## Ends in an error in state: 14.
+##
+##
+## The known suffix of the stack is as follows:
+## Simple_ref
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Simple_link Version
+##
+## Ends in an error in state: 15.
+##
+##
+## The known suffix of the stack is as follows:
+## Simple_link
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Ref_with_replacement Version
+##
+## Ends in an error in state: 17.
+##
+##
+## The known suffix of the stack is as follows:
+## Ref_with_replacement
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Link_with_replacement Version
+##
+## Ends in an error in state: 20.
+##
+##
+## The known suffix of the stack is as follows:
+## Link_with_replacement
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Link_with_replacement Simple_ref Version
+##
+## Ends in an error in state: 23.
+##
+##
+## The known suffix of the stack is as follows:
+## Link_with_replacement nonempty_list(located(inline_element))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 26, spurious reduction of production nonempty_list(located(inline_element)) -> inline_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Code_span Table_cell
+##
+## Ends in an error in state: 26.
+##
+##
+## The known suffix of the stack is as follows:
+## inline_element
+##
+
+[Insert {table $0] Should_not_be_empty
+
+main: Ref_with_replacement Simple_ref Version
+##
+## Ends in an error in state: 28.
+##
+##
+## The known suffix of the stack is as follows:
+## Ref_with_replacement nonempty_list(located(inline_element))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 26, spurious reduction of production nonempty_list(located(inline_element)) -> inline_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Simple_link Simple_ref Version
+##
+## Ends in an error in state: 30.
+##
+##
+## The known suffix of the stack is as follows:
+## Simple_link nonempty_list(located(inline_element))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 26, spurious reduction of production nonempty_list(located(inline_element)) -> inline_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Section_heading Code_span Table_cell
+##
+## Ends in an error in state: 33.
+##
+##
+## The known suffix of the stack is as follows:
+## inline_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Style Simple_ref Version
+##
+## Ends in an error in state: 35.
+##
+##
+## The known suffix of the stack is as follows:
+## Style nonempty_list(located(inline_element))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 26, spurious reduction of production nonempty_list(located(inline_element)) -> inline_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_LIGHT Simple_ref Version
+##
+## Ends in an error in state: 37.
+##
+## nonempty_list(cell_light) -> option(BAR) nonempty_list(located(inline_element)) . [ NEWLINE BAR ]
+## nonempty_list(cell_light) -> option(BAR) nonempty_list(located(inline_element)) . nonempty_list(cell_light) [ NEWLINE BAR ]
+##
+## The known suffix of the stack is as follows:
+## option(BAR) nonempty_list(located(inline_element))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 26, spurious reduction of production nonempty_list(located(inline_element)) -> inline_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_LIGHT Simple_ref NEWLINE Simple_ref NEWLINE Simple_ref NEWLINE Single_newline Word
+##
+## Ends in an error in state: 49.
+##
+##
+## The known suffix of the stack is as follows:
+## TABLE_LIGHT row_light row_light nonempty_list(row_light) option(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_LIGHT Simple_ref NEWLINE Simple_ref NEWLINE Single_newline Word
+##
+## Ends in an error in state: 53.
+##
+##
+## The known suffix of the stack is as follows:
+## TABLE_LIGHT row_light nonempty_list(row_light) option(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_LIGHT Simple_ref NEWLINE Single_newline Word
+##
+## Ends in an error in state: 56.
+##
+##
+## The known suffix of the stack is as follows:
+## TABLE_LIGHT nonempty_list(row_light) option(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY Word
+##
+## Ends in an error in state: 60.
+##
+##
+## The known suffix of the stack is as follows:
+## TABLE_HEAVY
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY SPACE Word
+##
+## Ends in an error in state: 61.
+##
+##
+## The known suffix of the stack is as follows:
+## TABLE_HEAVY option(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW Word
+##
+## Ends in an error in state: 62.
+##
+## nonempty_list(row_heavy) -> TABLE_ROW . option(whitespace) list(cell_heavy) RIGHT_BRACE option(whitespace) [ RIGHT_BRACE ]
+## nonempty_list(row_heavy) -> TABLE_ROW . option(whitespace) list(cell_heavy) RIGHT_BRACE option(whitespace) nonempty_list(row_heavy) [ RIGHT_BRACE ]
+##
+## The known suffix of the stack is as follows:
+## TABLE_ROW
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW SPACE Word
+##
+## Ends in an error in state: 63.
+##
+## nonempty_list(row_heavy) -> TABLE_ROW option(whitespace) . list(cell_heavy) RIGHT_BRACE option(whitespace) [ RIGHT_BRACE ]
+## nonempty_list(row_heavy) -> TABLE_ROW option(whitespace) . list(cell_heavy) RIGHT_BRACE option(whitespace) nonempty_list(row_heavy) [ RIGHT_BRACE ]
+##
+## The known suffix of the stack is as follows:
+## TABLE_ROW option(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW Table_cell Version
+##
+## Ends in an error in state: 64.
+##
+##
+## The known suffix of the stack is as follows:
+## Table_cell
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW Table_cell SPACE Version
+##
+## Ends in an error in state: 65.
+##
+##
+## The known suffix of the stack is as follows:
+## Table_cell option(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: PLUS Table_cell
+##
+## Ends in an error in state: 66.
+##
+##
+## The known suffix of the stack is as follows:
+## PLUS
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Modules Table_cell
+##
+## Ends in an error in state: 67.
+##
+##
+## The known suffix of the stack is as follows:
+## Modules
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Media_with_replacement Table_cell
+##
+## Ends in an error in state: 69.
+##
+##
+## The known suffix of the stack is as follows:
+## Media_with_replacement
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List SPACE Table_cell
+##
+## Ends in an error in state: 70.
+##
+##
+## The known suffix of the stack is as follows:
+## whitespace
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Media Table_cell
+##
+## Ends in an error in state: 73.
+##
+##
+## The known suffix of the stack is as follows:
+## Media
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: MINUS Table_cell
+##
+## Ends in an error in state: 76.
+##
+##
+## The known suffix of the stack is as follows:
+## MINUS
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List Word
+##
+## Ends in an error in state: 77.
+##
+##
+## The known suffix of the stack is as follows:
+## List
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List SPACE Word
+##
+## Ends in an error in state: 78.
+##
+##
+## The known suffix of the stack is as follows:
+## List list(whitespace)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 70, spurious reduction of production list(whitespace) ->
+## In state 71, spurious reduction of production list(whitespace) -> whitespace list(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List List_item Version
+##
+## Ends in an error in state: 79.
+##
+##
+## The known suffix of the stack is as follows:
+## List_item
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List List_item SPACE Version
+##
+## Ends in an error in state: 80.
+##
+##
+## The known suffix of the stack is as follows:
+## List_item list(whitespace)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 70, spurious reduction of production list(whitespace) ->
+## In state 71, spurious reduction of production list(whitespace) -> whitespace list(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List List_item PLUS Version
+##
+## Ends in an error in state: 84.
+##
+##
+## The known suffix of the stack is as follows:
+## List_item list(whitespace) nonempty_list(located(nestable_block_element))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 66, spurious reduction of production loption(separated_nonempty_list(__anonymous_1,located(nestable_block_element))) ->
+## In state 113, spurious reduction of production list_light -> PLUS loption(separated_nonempty_list(__anonymous_1,located(nestable_block_element)))
+## In state 94, spurious reduction of production list_element -> list_light
+## In state 96, spurious reduction of production nestable_block_element -> list_element
+## In state 91, spurious reduction of production nonempty_list(located(nestable_block_element)) -> nestable_block_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List List_item PLUS NEWLINE Word
+##
+## Ends in an error in state: 85.
+##
+##
+## The known suffix of the stack is as follows:
+## List_item list(whitespace) nonempty_list(located(nestable_block_element)) list(whitespace)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 70, spurious reduction of production list(whitespace) ->
+## In state 71, spurious reduction of production list(whitespace) -> whitespace list(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List List_item PLUS RIGHT_BRACE Word
+##
+## Ends in an error in state: 86.
+##
+##
+## The known suffix of the stack is as follows:
+## List_item list(whitespace) nonempty_list(located(nestable_block_element)) list(whitespace) RIGHT_BRACE
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: List List_item PLUS RIGHT_BRACE SPACE Word
+##
+## Ends in an error in state: 87.
+##
+##
+## The known suffix of the stack is as follows:
+## List_item list(whitespace) nonempty_list(located(nestable_block_element)) list(whitespace) RIGHT_BRACE list(whitespace)
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 70, spurious reduction of production list(whitespace) ->
+## In state 71, spurious reduction of production list(whitespace) -> whitespace list(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Before Simple_ref BAR
+##
+## Ends in an error in state: 91.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 26, spurious reduction of production nonempty_list(located(inline_element)) -> inline_element
+## In state 89, spurious reduction of production nestable_block_element -> nonempty_list(located(inline_element))
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: MINUS Simple_ref BAR
+##
+## Ends in an error in state: 101.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 26, spurious reduction of production nonempty_list(located(inline_element)) -> inline_element
+## In state 89, spurious reduction of production nestable_block_element -> nonempty_list(located(inline_element))
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: MINUS PLUS NEWLINE Word
+##
+## Ends in an error in state: 102.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element NEWLINE
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: MINUS PLUS NEWLINE MINUS Version
+##
+## Ends in an error in state: 103.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element NEWLINE MINUS
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: PLUS Simple_ref BAR
+##
+## Ends in an error in state: 107.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 26, spurious reduction of production nonempty_list(located(inline_element)) -> inline_element
+## In state 89, spurious reduction of production nestable_block_element -> nonempty_list(located(inline_element))
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: PLUS PLUS NEWLINE Word
+##
+## Ends in an error in state: 108.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element NEWLINE
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: PLUS PLUS NEWLINE SPACE Word
+##
+## Ends in an error in state: 110.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element NEWLINE option(SPACE)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: PLUS PLUS NEWLINE PLUS Version
+##
+## Ends in an error in state: 111.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element NEWLINE option(SPACE) PLUS
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW Table_cell PLUS Version
+##
+## Ends in an error in state: 114.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 66, spurious reduction of production loption(separated_nonempty_list(__anonymous_1,located(nestable_block_element))) ->
+## In state 113, spurious reduction of production list_light -> PLUS loption(separated_nonempty_list(__anonymous_1,located(nestable_block_element)))
+## In state 94, spurious reduction of production list_element -> list_light
+## In state 96, spurious reduction of production nestable_block_element -> list_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW Table_cell PLUS NEWLINE Word
+##
+## Ends in an error in state: 117.
+##
+##
+## The known suffix of the stack is as follows:
+## Table_cell option(whitespace) list(located(nestable_block_element)) option(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW Table_cell RIGHT_BRACE Word
+##
+## Ends in an error in state: 118.
+##
+##
+## The known suffix of the stack is as follows:
+## Table_cell option(whitespace) list(located(nestable_block_element)) option(whitespace) RIGHT_BRACE
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW RIGHT_BRACE Word
+##
+## Ends in an error in state: 121.
+##
+## nonempty_list(row_heavy) -> TABLE_ROW option(whitespace) list(cell_heavy) RIGHT_BRACE . option(whitespace) [ RIGHT_BRACE ]
+## nonempty_list(row_heavy) -> TABLE_ROW option(whitespace) list(cell_heavy) RIGHT_BRACE . option(whitespace) nonempty_list(row_heavy) [ RIGHT_BRACE ]
+##
+## The known suffix of the stack is as follows:
+## TABLE_ROW option(whitespace) list(cell_heavy) RIGHT_BRACE
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW RIGHT_BRACE SPACE Word
+##
+## Ends in an error in state: 122.
+##
+## nonempty_list(row_heavy) -> TABLE_ROW option(whitespace) list(cell_heavy) RIGHT_BRACE option(whitespace) . [ RIGHT_BRACE ]
+## nonempty_list(row_heavy) -> TABLE_ROW option(whitespace) list(cell_heavy) RIGHT_BRACE option(whitespace) . nonempty_list(row_heavy) [ RIGHT_BRACE ]
+##
+## The known suffix of the stack is as follows:
+## TABLE_ROW option(whitespace) list(cell_heavy) RIGHT_BRACE option(whitespace)
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: TABLE_HEAVY TABLE_ROW Table_cell RIGHT_BRACE SPACE Word
+##
+## Ends in an error in state: 124.
+##
+## list(cell_heavy) -> cell_heavy . list(cell_heavy) [ RIGHT_BRACE ]
+##
+## The known suffix of the stack is as follows:
+## cell_heavy
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Space Table_cell
+##
+## Ends in an error in state: 128.
+##
+## horizontal_whitespace -> Space . [ END ]
+##
+## The known suffix of the stack is as follows:
+## Space
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: See Version
+##
+## Ends in an error in state: 130.
+##
+##
+## The known suffix of the stack is as follows:
+## See
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Section_heading Version
+##
+## Ends in an error in state: 132.
+##
+##
+## The known suffix of the stack is as follows:
+## Section_heading
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Section_heading Simple_ref Version
+##
+## Ends in an error in state: 133.
+##
+##
+## The known suffix of the stack is as follows:
+## Section_heading list(located(inline_element))
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 14, spurious reduction of production list(located(inline_element)) ->
+## In state 32, spurious reduction of production ref -> Simple_ref list(located(inline_element))
+## In state 22, spurious reduction of production inline_element -> ref
+## In state 33, spurious reduction of production list(located(inline_element)) ->
+## In state 34, spurious reduction of production list(located(inline_element)) -> inline_element list(located(inline_element))
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: SPACE Table_cell
+##
+## Ends in an error in state: 135.
+##
+## horizontal_whitespace -> SPACE . [ END ]
+##
+## The known suffix of the stack is as follows:
+## SPACE
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Raise Version
+##
+## Ends in an error in state: 136.
+##
+##
+## The known suffix of the stack is as follows:
+## Raise
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: RETURN Version
+##
+## Ends in an error in state: 138.
+##
+##
+## The known suffix of the stack is as follows:
+## RETURN
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Param Version
+##
+## Ends in an error in state: 140.
+##
+##
+## The known suffix of the stack is as follows:
+## Param
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: DEPRECATED Version
+##
+## Ends in an error in state: 146.
+##
+##
+## The known suffix of the stack is as follows:
+## DEPRECATED
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Before Version
+##
+## Ends in an error in state: 150.
+##
+##
+## The known suffix of the stack is as follows:
+## Before
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Single_newline Word
+##
+## Ends in an error in state: 153.
+##
+## main -> whitespace . END [ # ]
+##
+## The known suffix of the stack is as follows:
+## whitespace
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: PLUS NEWLINE Table_cell
+##
+## Ends in an error in state: 155.
+##
+## nonempty_list(located(toplevel)) -> toplevel . [ END ]
+## nonempty_list(located(toplevel)) -> toplevel . nonempty_list(located(toplevel)) [ END ]
+##
+## The known suffix of the stack is as follows:
+## toplevel
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Before PLUS RIGHT_BRACE
+##
+## Ends in an error in state: 156.
+##
+##
+## The known suffix of the stack is as follows:
+## tag_with_content
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 66, spurious reduction of production loption(separated_nonempty_list(__anonymous_1,located(nestable_block_element))) ->
+## In state 113, spurious reduction of production list_light -> PLUS loption(separated_nonempty_list(__anonymous_1,located(nestable_block_element)))
+## In state 94, spurious reduction of production list_element -> list_light
+## In state 96, spurious reduction of production nestable_block_element -> list_element
+## In state 91, spurious reduction of production nonempty_list(located(nestable_block_element)) -> nestable_block_element
+## In state 151, spurious reduction of production tag_with_content -> Before nonempty_list(located(nestable_block_element))
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Author Table_cell
+##
+## Ends in an error in state: 158.
+##
+##
+## The known suffix of the stack is as follows:
+## tag_bare
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: PLUS RIGHT_BRACE
+##
+## Ends in an error in state: 161.
+##
+##
+## The known suffix of the stack is as follows:
+## nestable_block_element
+##
+## WARNING: This example involves spurious reductions.
+## This implies that, although the LR(1) items shown above provide an
+## accurate view of the past (what has been recognized so far), they
+## may provide an INCOMPLETE view of the future (what was expected next).
+## In state 66, spurious reduction of production loption(separated_nonempty_list(__anonymous_1,located(nestable_block_element))) ->
+## In state 113, spurious reduction of production list_light -> PLUS loption(separated_nonempty_list(__anonymous_1,located(nestable_block_element)))
+## In state 94, spurious reduction of production list_element -> list_light
+## In state 96, spurious reduction of production nestable_block_element -> list_element
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>
+
+main: Section_heading RIGHT_BRACE Table_cell
+##
+## Ends in an error in state: 163.
+##
+##
+## The known suffix of the stack is as follows:
+## heading
+##
+
+<YOUR SYNTAX ERROR MESSAGE HERE>  

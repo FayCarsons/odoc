@@ -72,11 +72,12 @@ let message_api =
        These are also some words\n\
        The next line should fail\n\
        {i}" );
+    ("Blank line in list", "{ol \n\n}");
     ("Stray table", "{t");
-    ("Empty style", "{i}");
+    ("Empty style", "{i }");
   ]
 
-let print_token_list tokens =
+let _print_token_list tokens =
   print_endline "Tokens: ";
   List.rev tokens
   |> List.fold_left
@@ -84,37 +85,26 @@ let print_token_list tokens =
        ""
   |> print_endline
 
-let run_test (label, input_text) =
+let run_test (label, input_text) : (string, string) result =
   let module Parse = Odoc_parser.Tester in
-  Printf.printf ">>> Running %s\n" label;
+  Printf.printf ">>> Running %s >>>\n\n" label;
   let input = Parse.dummy_loc in
   input.warnings <- [];
   let lexbuf = Lexing.from_string input_text in
-  let token_buf = ref [] in
   let push_warning warning = input.warnings <- warning :: input.warnings in
   let starting_location =
     Lexing.{ pos_fname = "f.ml"; pos_bol = 0; pos_cnum = 0; pos_lnum = 0 }
   in
   try
-    let ast =
+    let _ast =
       Parse.parse ~input_text ~starting_location ~input:Parse.dummy_loc ~lexbuf
         ~push_warning
     in
-    let warnings = input.warnings in
-    print_token_list !token_buf;
-    Format.printf "%a\n" Test.output (ast, warnings);
-    print_newline ();
-    print_endline "SUCCESSFUL\n\n"
-  with
-  | Failure reason ->
-      Printf.printf "case \'%s\' failed: %s\n\n" label reason;
-      print_token_list !token_buf
-  | exc ->
-      Option.iter
-        (fun reason ->
-          Printf.printf "case \'%s\' failed: %s\n\n" label reason;
-          print_token_list !token_buf)
-        (Printexc.use_printers exc)
+    let _warnings = input.warnings in
+    Ok (Printf.sprintf "%s: successful" label)
+  with exc ->
+    let reason = Printexc.to_string exc in
+    Error (Printf.sprintf "!Case \'%s\' failed:\n%s" label reason)
 
 let () =
   let cases =
@@ -129,4 +119,7 @@ let () =
           documentation_cases)
     else documentation_cases
   in
-  List.iter run_test [ List.hd cases ]
+  let results = [ run_test (List.hd @@ List.rev cases) ] in
+  List.iter
+    (function Ok s -> print_endline s | Error e -> print_endline e)
+    results

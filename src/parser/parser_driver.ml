@@ -5,6 +5,10 @@ module Error = MenhirLib.ErrorReports
 
 let unreachable s = failwith @@ Printf.sprintf "UNREACHABLE BRANCH IN %s\n" s
 
+let ( >>= ) = Option.bind
+let ( >>| ) f o = Option.map o f
+let ( let* ) = Option.bind
+
 module With_position = struct
   type t = Parser.token * Lexing.position * Lexing.position
 
@@ -13,6 +17,7 @@ module With_position = struct
     let Loc.{ value; _ } = Lexer.token input lexbuf in
     (value, lexbuf.Lexing.lex_start_p, lexbuf.Lexing.lex_curr_p)
 
+  let is f (x, _, _) = f x
   let same (_, start_pos, end_pos) other_token =
     (other_token, start_pos, end_pos)
 end
@@ -65,21 +70,24 @@ module Zipper = struct
         if index < self.index then go pred (pred self.index) self.left
         else go succ (succ self.index) self.right
 
-  let rewind self predicate =
+  let rewind predicate self =
     let rec go self =
-      if predicate self.focus then Some self
-      else Option.bind (move_left self) go
+      if predicate self.focus then Some self else move_left self >>= go
     in
     go self
 
-  let insert_right : 'a t -> 'a -> 'a t =
-   fun self elt ->
-    { self with right = elt :: self.right; length = succ self.length }
+  let insert_right : 'b -> 'a t -> 'a t =
+   fun elt self ->
+    {
+      self with
+      right = With_position.same self.focus elt :: self.right;
+      length = succ self.length;
+    }
 
   (* Does not modify index, only removes first element for which 'predicate'
      returns true *)
-  let remove_map_right : 'a t -> ('a -> bool) -> 'a t =
-   fun self predicate ->
+  let remove_in_place_right : ('a -> bool) -> 'a t -> 'a t =
+   fun predicate self ->
     let rec remove acc = function
       | x :: xs when predicate x -> { self with right = List.rev acc @ xs }
       | x :: xs -> remove (x :: acc) xs
@@ -100,6 +108,11 @@ module Zipper = struct
     in
     match next_token () with END, _, _ -> None | first -> go first []
 
+  let pp self =
+    Printf.sprintf
+      "Zipper { left: [ .. ], focus: %s, index: %d, right: [ .. ] }"
+      ((fun (t, _, _) -> Token.describe t) self.focus)
+      self.index
   let to_list : 'a t -> 'a list =
    fun self -> List.rev (self.focus :: self.left) @ self.right
 end
@@ -117,23 +130,17 @@ module Context = struct
   }
 
   let create ~(file : string) ~(next_token : unit -> With_position.t)
-      ~(push_warning : Warning.t -> unit) ~(first_checkpoint : Ast.t checkpoint)
-      : t option =
+      ~(push_warning : Warning.t -> unit) : t option =
     Zipper.of_token_dispenser next_token
     |> Option.map (fun tokens ->
-           {
-             file;
-             push_warning;
-             state_stack = [ { state = first_checkpoint; index = 0 } ];
-             tokens;
-           })
+           { file; push_warning; state_stack = []; tokens })
 
-  let next_token : t -> With_position.t option =
+  let next_token : t -> With_position.t =
    fun self ->
-    Zipper.move_right self.tokens
-    |> Option.map (fun next ->
-           self.tokens <- next;
-           next.focus)
+    let temp = self.tokens.focus in
+    self.tokens <-
+      Zipper.move_right self.tokens |> Option.value ~default:self.tokens;
+    temp
 
   let pp_checkpoint = function
     | InputNeeded _ -> "Input needed (Parser needs token)"
@@ -180,43 +187,73 @@ module Context = struct
   let filter_opening_token :
       type a. a checkpoint -> Parser.token -> a checkpoint option =
    fun checkpoint token ->
-    match token with
-    | Style _ | List _ | List_item _ | TABLE_LIGHT | TABLE_HEAVY | TABLE_ROW ->
-        Some checkpoint
-    | _ -> None
+    match checkpoint with
+    | Shifting _ -> (
+        match token with
+        | Style _ | List _ | List_item _ | TABLE_LIGHT | TABLE_HEAVY | TABLE_ROW
+          ->
+            Some checkpoint
+        | _ -> None)
+    | _ ->
+        print_endline "Got non-shifting checkpoint";
+        None
 
-  let update : t -> Ast.t checkpoint -> With_position.t -> t =
-   fun self checkpoint (token, _, _) ->
+  let update : t -> Ast.t checkpoint -> t =
+   fun self checkpoint ->
+    let token, _, _ =
+      match self.tokens.left with t :: _ -> t | _ -> self.tokens.focus
+    in
+    print_endline "Entering Context.update";
     match filter_opening_token checkpoint token with
     | Some checkpoint ->
+        Printf.printf "Inserting checkpoint %s into context\n%!"
+          (pp_checkpoint checkpoint);
         {
           self with
           state_stack =
-            { state = checkpoint; index = self.tokens.index }
+            { state = checkpoint; index = max 0 @@ pred self.tokens.index }
             :: self.state_stack;
         }
-    | None -> self
+    | None ->
+        Printf.printf
+          "Checkpoint or associated token do not match:\n\
+           token: %s\n\
+           checkpoint: %s\n\
+           %!"
+          (Token.describe token) (pp_checkpoint checkpoint);
+        self
 
   let get_checkpoint : t -> int -> Ast.t Engine.checkpoint option =
-   fun self index ->
-    List.find_map
-      (fun { state; index = index' } ->
-        if index = index' then Some state else None)
-      self.state_stack
+   fun self needle ->
+    let valid_state = function
+      | HandlingError _ | Shifting _ | AboutToReduce _ -> true
+      | _ -> false
+    in
+    match
+      List.find_map
+        (function
+          | { state; index } when index = needle && valid_state state ->
+              Some state
+          | _ -> None)
+        self.state_stack
+    with
+    | Some x -> Some x
+    | None ->
+        print_endline "Context.get_checkpoint returned None";
+        None
 end
 
 module Action = struct
   type t = Insert of substitution | Remove of substitution
-  and substitution = { this : Parser.token; after_this : Parser.token }
+  and substitution = { solution : Parser.token; parent : Parser.token }
 
   let pp = function
-    | Insert { this; after_this } ->
-        Printf.sprintf "Insert this: %s\nafter this: %s" (Token.describe this)
-          (Token.describe after_this)
-    | Remove { this; after_this } ->
+    | Insert { solution; parent } ->
+        Printf.sprintf "Insert this: %s\nafter this: %s"
+          (Token.describe solution) (Token.describe parent)
+    | Remove { solution; parent } ->
         Printf.sprintf "Remove the first: %s\nafter this: %s"
-          (Token.describe this)
-          (Token.describe after_this)
+          (Token.describe solution) (Token.describe parent)
 
   let ( let* ) = Option.bind
 
@@ -241,13 +278,15 @@ module Action = struct
         in
         let lexbuf = Lexing.from_string (List.fold_left String.cat "" rest) in
         try
-          let Loc.{ value = this; _ } = Lexer.token dummy_input lexbuf in
-          let Loc.{ value = after_this; _ } = Lexer.token dummy_input lexbuf in
+          let Loc.{ value = solution; _ } = Lexer.token dummy_input lexbuf in
+          let Loc.{ value = parent; _ } = Lexer.token dummy_input lexbuf in
           match dummy_input.warnings with
-          | [] -> Option.some @@ Insert { this; after_this }
+          | [] -> Option.some @@ Insert { solution; parent }
           | _ -> None
         with _ -> None)
     | _ -> None
+
+  let element = function Insert t | Remove t -> t.parent
 
   let split : string -> string * string =
    fun input ->
@@ -265,60 +304,116 @@ module Action = struct
   let eval : Context.t -> t -> (Ast.t Engine.checkpoint * Context.t) option =
    fun context self ->
     match self with
-    | Insert { this; after_this } -> (
-        match
-          Zipper.rewind context.tokens (fun (t, _, _) ->
-              Token.same t after_this)
-        with
-        | Some zipper ->
-            context.tokens <-
-              Zipper.insert_right zipper (With_position.same zipper.focus this);
-            Context.get_checkpoint context zipper.index
-            |> Option.map (fun checkpoint -> (checkpoint, context))
-        | None -> None)
-    | Remove { this; after_this } -> (
-        match
-          Zipper.rewind context.tokens (fun (t, _, _) ->
-              Token.same t after_this)
-        with
-        | Some zipper ->
-            context.tokens <-
-              Zipper.remove_map_right zipper (fun (t, _, _) ->
-                  Token.same t this);
-            Context.get_checkpoint context zipper.index
-            |> Option.map (fun checkpoint -> (checkpoint, context))
-        | None -> None)
+    | Insert { solution; parent } ->
+        let* zipper =
+          Zipper.rewind (With_position.is (Token.same parent)) context.tokens
+          >>| Zipper.insert_right solution
+        in
+        context.tokens <- zipper;
+        let* checkpoint = Context.get_checkpoint context zipper.index in
+        Some (checkpoint, context)
+    | Remove { solution; parent } ->
+        let* zipper =
+          Zipper.rewind (With_position.is @@ Token.same parent) context.tokens
+          >>| Zipper.remove_in_place_right
+                (With_position.is @@ Token.same solution)
+        in
+        context.tokens <- zipper;
+        let* checkpoint = Context.get_checkpoint context zipper.index in
+        Some (checkpoint, context)
+
+  let get_warning : string -> Parse_error.parser_error option =
+   fun tag ->
+    let open Parse_error in
+    let words = String.trim tag |> String.split_on_char ' ' in
+    match words with
+    | "Should_not_be_empty" :: _ -> Some Should_not_be_empty
+    | "End_not_allowed" :: _ -> Some End_not_allowed
+    | "Not_allowed" :: _token_string :: _ ->
+        failwith
+          "Parser_driver.Action.get_warning :: Not_allowed branch not \
+           implemented"
+    | "Should_be_followed_by_whitespace" :: _ ->
+        Some Should_be_followed_by_whitespace
+    | "Should_begin_line" :: _ -> Some Should_begin_line
+    | "No_markup" :: _ -> Some No_markup
+    | "Unpaired_right_brace" :: _ -> Some Unpaired_right_brace
+    | _ -> None
 end
 
 let env : type a. a Engine.checkpoint -> a Engine.env = function
   | Engine.HandlingError env -> env
   | _ -> unreachable "Parser_driver.env"
 
+let make_span : string -> Lexing.position -> Lexing.position -> Loc.span =
+ fun file start_pos end_pos ->
+  let open Loc in
+  let open Lexing in
+  {
+    file;
+    start =
+      {
+        line = start_pos.pos_lnum;
+        column = start_pos.pos_cnum - start_pos.pos_bol;
+      };
+    end_ =
+      { line = end_pos.pos_lnum; column = end_pos.pos_cnum - end_pos.pos_bol };
+  }
+
 let fill_holes : type a. input_text:string -> a Engine.env -> int -> string =
  fun ~input_text env i ->
   match Engine.get i env with
   | Some (Engine.Element (_, _, start_pos, end_pos)) ->
       Error.extract input_text (start_pos, end_pos)
-      |> Error.sanitize |> Error.compress
   | None -> "" (* Parser is in initial state, which shouldn't be possible *)
 
+let log : tag:string -> string -> string =
+ fun ~tag s ->
+  Printf.printf "%s: %s%!" tag s;
+  s
+
+(* TODO: So this is failing because the functions in MehirLib's Error module
+   seem to sanitize, specifically lowercase and remove underscores from, error
+   messages. This breaks our metadata system. We will have to implement our own
+   versions of these functions *)
 let error_message :
-    type a. input_text:string -> a Engine.env -> (Action.t * string) option =
- fun ~input_text env ->
+    type a.
+    input_text:string ->
+    Context.t ->
+    a Engine.env ->
+    (Action.t * Warning.t) option =
+ fun ~input_text context env ->
   print_endline "IN Main.error_message";
   match Engine.stack env with
-  | (lazy (Cons (Engine.Element (state, _, _, _), _))) -> (
+  | (lazy (Cons (Engine.Element (state, _ast_node, start_pos, end_pos), _)))
+    -> (
       let state_id = Engine.number state in
       Printf.printf "Error state number: %d\n\n%!" state_id;
+      let menhir_message =
+        try Parser_messages.message state_id
+        with Not_found ->
+          print_endline "<<MATCHING ERROR MESSAGE NOT FOUND>>";
+          raise Not_found
+      in
       try
         let metadata, message =
-          Parser_messages.message state_id
+          menhir_message
+          |> log ~tag:"Original message"
           |> Error.expand (fill_holes ~input_text env)
           |> Action.split
         in
-        let action = Action.parse metadata |> Option.get in
-        Some (action, message)
-      with Not_found -> None)
+        match Action.get_warning message with
+        | Some warning_kind ->
+            let action = Action.parse metadata |> Option.get in
+            let element = Action.element action |> Token.describe in
+            let span = make_span context.file start_pos end_pos in
+            let warning = Parse_error.make_warning ~element span warning_kind in
+            Some (action, warning)
+        | None ->
+            failwith "Parser_driver.error_message :: Action.get_warning is none"
+      with exn ->
+        print_endline "CANNOT RECOVER";
+        raise exn)
   | (lazy Nil) -> None
 
 let run_parser :
@@ -330,45 +425,54 @@ let run_parser :
     Ast.t =
  fun ~input_text ~starting_location ~lexbuf ~input ~push_warning ->
   let open Engine in
-  let rec handle_error (type a) ~context = function
-    | HandlingError env as _checkpoint -> (
-        let eval context action =
-          match Action.eval context action with
-          | Some (checkpoint, context) ->
-              run ~context (Engine.resume checkpoint)
-          | None -> raise (Invalid_argument "Main.run_parser.handle_error")
-        in
-        match error_message ~input_text env with
-        | Some (action, _error_message) -> eval context action
-        | None ->
-            (* here we would want to 'wordify' some portion, or potentially all
-               of, the tokens. Transforming anything that isn't whitespace into
-               a 'Word' *)
-            print_endline "NO MATCHING ERROR MESSAGE";
-            raise (Invalid_argument "Main.run_parser.handle_error"))
-    | _ -> unreachable "Parser_driver.run_parser.handle_error"
-  and run ~context = function
-    | InputNeeded _ as checkpoint -> (
-        match Context.next_token context with
-        | Some ((t, _, _) as token) ->
-            Printf.printf "Got token: %s\n%!" (Token.print t);
-            run ~context (Engine.offer checkpoint token)
-        | None -> raise (Invalid_argument "Main.run_parser.run/input_needed"))
+  let rec handle_error : Context.t -> Ast.t Engine.env -> Ast.t =
+   fun context env ->
+    let eval context action =
+      match Action.eval context action with
+      | Some (checkpoint, context) ->
+          Printf.printf "Rewound to checkpoint: %s\n%!"
+            (Context.pp_checkpoint checkpoint);
+          assert ((function Shifting _ -> true | _ -> false) checkpoint);
+          run context (Engine.resume checkpoint)
+      | None ->
+          print_endline "FATAL";
+          raise (Failure "Main.run_parser.handle_error.eval")
+    in
+    match Printexc.print (error_message ~input_text context) env with
+    | Some (action, warning) ->
+        input.warnings <- warning :: input.warnings;
+        eval context action
+    | None ->
+        (* here we would want to 'wordify' some portion, or potentially all
+           of, the tokens. Transforming anything that isn't whitespace into
+           a 'Word' *)
+        print_endline "FATAL: NO MATCHING ERROR MESSAGE";
+        raise (Failure "Main.run_parser.handle_error")
+  and run : Context.t -> Ast.t Engine.checkpoint -> Ast.t =
+   fun context checkpoint ->
+    match checkpoint with
+    | InputNeeded _ as checkpoint ->
+        let ((t, _, _) as token) = Context.next_token context in
+        Printf.printf "Got token: %s\n%!" (Token.print t);
+        Printf.printf "Current context: %s\n%!" (Context.to_string context);
+        run context (Engine.offer checkpoint token)
     | Shifting _ as checkpoint ->
-        let context = Context.update context checkpoint context.tokens.focus in
-        run ~context (Engine.resume checkpoint)
-    | AboutToReduce _ as checkpoint -> run ~context (resume checkpoint)
-    | Rejected ->
-        (* What do we do here?? *)
-        assert false
-    | HandlingError _ as checkpoint -> handle_error ~context checkpoint
+        Printf.printf "Shifting last token onto stack :)\n%!";
+        let context = Context.update context checkpoint in
+        run context (Engine.resume checkpoint)
+    | AboutToReduce _ as checkpoint -> run context (resume checkpoint)
+    | HandlingError env -> handle_error context env
     | Accepted ast -> ast
+    | Rejected ->
+        (* Not sure what can be done here - generally
+           only a consequence of repeated HandlingError states*)
+        assert false
   in
   let first_checkpoint = Incremental.main starting_location in
   let file = starting_location.Lexing.pos_fname in
   let next_token () = With_position.next_with_positon input lexbuf in
-  match Context.create ~file ~next_token ~push_warning ~first_checkpoint with
-  | Some context -> run ~context first_checkpoint
+  match Context.create ~file ~next_token ~push_warning with
+  | Some context -> run context first_checkpoint
   | None ->
       (* This only happens when the token stream is empty (only contains 'END'
          token). Because errors are not possible without input, we can simply

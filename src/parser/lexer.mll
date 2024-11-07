@@ -464,7 +464,8 @@ and token input = parse
           warning lexbuf input ~start_offset
             (Parse_error.language_tag_invalid_char lang_tag_ c);
 
-          (* NOTE : (@faycarsons) Metadata should not be `None` *)
+          (* NOTE : (@faycarsons) Metadata should not be `None` -- I think this
+             is what I'm referencing on line 815 *)
           code_block start_offset (Lexing.lexeme_end lexbuf) None (Buffer.create 256) delimiter input lexbuf
     }
 
@@ -809,7 +810,9 @@ and code_block_metadata_tail input = parse
   | eof
     { Error `Eof }
 
-(* NOTE : (@faycarsons) This is currently broken!! *)
+(* NOTE : (@faycarsons) This is currently broken....or is it ;) 
+   Actually though I don't know, seems to be working in tests but I believe I
+   nuked something that used to be here. TODO check diffs and fix I guess lollll *)
 and code_block start_offset content_offset metadata prefix delim input = parse
   | ("]" (delim_char* as delim') "[") as terminator
     { if delim = delim'
