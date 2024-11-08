@@ -17,9 +17,10 @@ module With_position = struct
     let Loc.{ value; _ } = Lexer.token input lexbuf in
     (value, lexbuf.Lexing.lex_start_p, lexbuf.Lexing.lex_curr_p)
 
-  let is f (x, _, _) = f x
-  let same (_, start_pos, end_pos) other_token =
-    (other_token, start_pos, end_pos)
+  let is : (Parser.token -> bool) -> t -> bool = fun f (x, _, _) -> f x
+  let same : t -> Parser.token -> t =
+   fun (_, start_pos, end_pos) other_token -> (other_token, start_pos, end_pos)
+  let inner (x, _, _) = x
 end
 
 module Zipper = struct
@@ -32,31 +33,32 @@ module Zipper = struct
     length : int;
   }
 
-  let move_left self =
-    match self.left with
-    | last :: rest ->
+  let move_left = function
+    | { left = last :: rest; focus; index; right; _ } as self ->
         Some
           {
-            right = self.focus :: self.right;
-            index = pred self.index;
+            self with
+            right = focus :: right;
+            index = pred index;
             focus = last;
             left = rest;
-            length = self.length;
           }
-    | [] -> None
+    | _ -> None
 
-  let move_right self =
-    match self.right with
-    | x :: xs ->
+  let move_right = function
+    | { right = next :: rest; focus; index; left; _ } as self ->
         Some
           {
-            left = self.focus :: self.left;
-            focus = x;
-            index = succ self.index;
-            right = xs;
-            length = self.length;
+            self with
+            left = focus :: left;
+            focus = next;
+            right = rest;
+            index = succ index;
           }
-    | [] -> None
+    | _ -> None
+
+  let peek_left = function { left = x :: _; _ } -> Some x | _ -> None
+  let peek_right = function { right = x :: _; _ } -> Some x | _ -> None
 
   let nth self = function
     | n when n = self.index -> Some self.focus
@@ -64,32 +66,33 @@ module Zipper = struct
     | index ->
         let rec go direction idx = function
           | x :: _ when idx = index -> Some x
-          | _ :: xs -> go direction (direction idx) xs
-          | [] -> None
+          | _ :: xs when idx < self.length -> go direction (direction idx) xs
+          | _ -> None
         in
         if index < self.index then go pred (pred self.index) self.left
         else go succ (succ self.index) self.right
 
   let rewind predicate self =
     let rec go self =
-      if predicate self.focus then Some self else move_left self >>= go
+      if predicate self.focus then (
+        Printf.printf "Zipper.rewind found target: %s\n"
+          (Token.describe @@ With_position.inner self.focus);
+        Some self)
+      else move_left self >>= go
     in
     go self
 
   let insert_right : 'b -> 'a t -> 'a t =
    fun elt self ->
-    {
-      self with
-      right = With_position.same self.focus elt :: self.right;
-      length = succ self.length;
-    }
+    { self with right = elt :: self.right; length = succ self.length }
 
   (* Does not modify index, only removes first element for which 'predicate'
      returns true *)
   let remove_in_place_right : ('a -> bool) -> 'a t -> 'a t =
    fun predicate self ->
     let rec remove acc = function
-      | x :: xs when predicate x -> { self with right = List.rev acc @ xs }
+      | x :: xs when predicate x ->
+          { self with right = List.rev acc @ xs; length = pred self.length }
       | x :: xs -> remove (x :: acc) xs
       | [] -> self
     in
@@ -102,7 +105,16 @@ module Zipper = struct
       match next_token () with
       | (END, _, _) as token ->
           let right = List.rev (token :: acc) in
-          let length = succ (List.length right) in
+          let length = succ @@ List.length right in
+          let print_token_list tokens =
+            List.fold_left
+              (fun s (token, _, _) -> s ^ "\n" ^ Token.describe token)
+              "" tokens
+          in
+          Printf.printf "Tokens:\n%s\n%s\n%!"
+            (Token.describe @@ With_position.inner focus)
+            (print_token_list right);
+          Printf.printf "Token list len is: %d" (succ @@ List.length right);
           Some { left = []; focus; index = 0; right; length }
       | token -> go focus (token :: acc)
     in
@@ -110,11 +122,14 @@ module Zipper = struct
 
   let pp self =
     Printf.sprintf
-      "Zipper { left: [ .. ], focus: %s, index: %d, right: [ .. ] }"
+      "Zipper { left: ( [ .. ] of len %d ), focus: %s, index: %d, right: ( [ \
+       .. ] of len %d ) }"
+      (List.length self.left)
       ((fun (t, _, _) -> Token.describe t) self.focus)
-      self.index
+      (List.length self.right) self.index
+
   let to_list : 'a t -> 'a list =
-   fun self -> List.rev (self.focus :: self.left) @ self.right
+   fun self -> List.rev self.left @ (self.focus :: self.right)
 end
 
 module Context = struct
@@ -138,8 +153,9 @@ module Context = struct
   let next_token : t -> With_position.t =
    fun self ->
     let temp = self.tokens.focus in
-    self.tokens <-
-      Zipper.move_right self.tokens |> Option.value ~default:self.tokens;
+    Option.iter
+      (fun next -> self.tokens <- next)
+      (Zipper.move_right self.tokens);
     temp
 
   let pp_checkpoint = function
@@ -184,63 +200,42 @@ module Context = struct
       (print_states states_with_tokens)
       most_recent_token
 
+  let is_opening_token : Parser.token -> bool = function
+    | Style _ | List _ | List_item _ | TABLE_LIGHT | TABLE_HEAVY | TABLE_ROW ->
+        true
+    | _ -> false
+
   let filter_opening_token :
       type a. a checkpoint -> Parser.token -> a checkpoint option =
    fun checkpoint token ->
-    match checkpoint with
-    | Shifting _ -> (
-        match token with
-        | Style _ | List _ | List_item _ | TABLE_LIGHT | TABLE_HEAVY | TABLE_ROW
-          ->
-            Some checkpoint
-        | _ -> None)
-    | _ ->
-        print_endline "Got non-shifting checkpoint";
-        None
+    if is_opening_token token then Some checkpoint else None
 
+  let is_some_and f = function Some x -> f x | _ -> false
   let update : t -> Ast.t checkpoint -> t =
    fun self checkpoint ->
-    let token, _, _ =
-      match self.tokens.left with t :: _ -> t | _ -> self.tokens.focus
-    in
-    print_endline "Entering Context.update";
-    match filter_opening_token checkpoint token with
+    match
+      Zipper.peek_left self.tokens
+      >>| With_position.inner
+      >>= filter_opening_token checkpoint
+    with
     | Some checkpoint ->
-        Printf.printf "Inserting checkpoint %s into context\n%!"
-          (pp_checkpoint checkpoint);
         {
           self with
           state_stack =
-            { state = checkpoint; index = max 0 @@ pred self.tokens.index }
+            { state = checkpoint; index = pred self.tokens.index }
             :: self.state_stack;
         }
-    | None ->
-        Printf.printf
-          "Checkpoint or associated token do not match:\n\
-           token: %s\n\
-           checkpoint: %s\n\
-           %!"
-          (Token.describe token) (pp_checkpoint checkpoint);
-        self
+    | None -> self
 
-  let get_checkpoint : t -> int -> Ast.t Engine.checkpoint option =
-   fun self needle ->
-    let valid_state = function
-      | HandlingError _ | Shifting _ | AboutToReduce _ -> true
-      | _ -> false
-    in
-    match
-      List.find_map
-        (function
-          | { state; index } when index = needle && valid_state state ->
-              Some state
-          | _ -> None)
-        self.state_stack
-    with
-    | Some x -> Some x
-    | None ->
-        print_endline "Context.get_checkpoint returned None";
-        None
+  let get_checkpoint : t -> Ast.t Engine.checkpoint option =
+   fun self ->
+    List.find_map
+      (function
+        | { state; index } when index = self.tokens.index ->
+            Printf.printf "Got checkpoint: %s\n%!" (pp_checkpoint state);
+            Some state
+        | _ -> None)
+      self.state_stack
 end
 
 module Action = struct
@@ -305,21 +300,26 @@ module Action = struct
    fun context self ->
     match self with
     | Insert { solution; parent } ->
+        print_endline "Action.eval.Insert";
         let* zipper =
           Zipper.rewind (With_position.is (Token.same parent)) context.tokens
-          >>| Zipper.insert_right solution
         in
+        let zipper =
+          Zipper.insert_right (With_position.same zipper.focus solution) zipper
+        in
+        Printf.printf "Inserted token into Zipper: %s\n%!" (Zipper.pp zipper);
         context.tokens <- zipper;
-        let* checkpoint = Context.get_checkpoint context zipper.index in
+        let* checkpoint = Context.get_checkpoint context in
         Some (checkpoint, context)
     | Remove { solution; parent } ->
+        print_endline "Action.eval.Remove";
         let* zipper =
           Zipper.rewind (With_position.is @@ Token.same parent) context.tokens
           >>| Zipper.remove_in_place_right
                 (With_position.is @@ Token.same solution)
         in
         context.tokens <- zipper;
-        let* checkpoint = Context.get_checkpoint context zipper.index in
+        let* checkpoint = Context.get_checkpoint context in
         Some (checkpoint, context)
 
   let get_warning : string -> Parse_error.parser_error option =
@@ -426,47 +426,46 @@ let run_parser :
  fun ~input_text ~starting_location ~lexbuf ~input ~push_warning ->
   let open Engine in
   let rec handle_error : Context.t -> Ast.t Engine.env -> Ast.t =
-   fun context env ->
-    let eval context action =
-      match Action.eval context action with
-      | Some (checkpoint, context) ->
-          Printf.printf "Rewound to checkpoint: %s\n%!"
-            (Context.pp_checkpoint checkpoint);
-          assert ((function Shifting _ -> true | _ -> false) checkpoint);
-          run context (Engine.resume checkpoint)
+    print_endline "run_parser.handle_error";
+    fun context env ->
+      let eval context action =
+        Printf.printf "run_parser.handle_error.eval:\ncontext: %s\n%!"
+          (Context.to_string context);
+        match Action.eval context action with
+        | Some (checkpoint, context) -> run context (Engine.resume checkpoint)
+        | None -> raise (Failure "Main.run_parser.handle_error.eval")
+      in
+      match Printexc.print (error_message ~input_text context) env with
+      | Some (action, warning) ->
+          input.warnings <- warning :: input.warnings;
+          eval context action
       | None ->
-          print_endline "FATAL";
-          raise (Failure "Main.run_parser.handle_error.eval")
-    in
-    match Printexc.print (error_message ~input_text context) env with
-    | Some (action, warning) ->
-        input.warnings <- warning :: input.warnings;
-        eval context action
-    | None ->
-        (* here we would want to 'wordify' some portion, or potentially all
-           of, the tokens. Transforming anything that isn't whitespace into
-           a 'Word' *)
-        print_endline "FATAL: NO MATCHING ERROR MESSAGE";
-        raise (Failure "Main.run_parser.handle_error")
+          (* here we would want to 'wordify' some portion, or potentially all
+             of, the tokens. Transforming anything that isn't whitespace into
+             a 'Word' *)
+          print_endline "FATAL: NO MATCHING ERROR MESSAGE";
+          raise (Failure "Main.run_parser.handle_error")
   and run : Context.t -> Ast.t Engine.checkpoint -> Ast.t =
-   fun context checkpoint ->
-    match checkpoint with
-    | InputNeeded _ as checkpoint ->
-        let ((t, _, _) as token) = Context.next_token context in
-        Printf.printf "Got token: %s\n%!" (Token.print t);
-        Printf.printf "Current context: %s\n%!" (Context.to_string context);
-        run context (Engine.offer checkpoint token)
-    | Shifting _ as checkpoint ->
-        Printf.printf "Shifting last token onto stack :)\n%!";
-        let context = Context.update context checkpoint in
-        run context (Engine.resume checkpoint)
-    | AboutToReduce _ as checkpoint -> run context (resume checkpoint)
-    | HandlingError env -> handle_error context env
-    | Accepted ast -> ast
-    | Rejected ->
-        (* Not sure what can be done here - generally
-           only a consequence of repeated HandlingError states*)
-        assert false
+    let n_runs = ref 0 in
+    fun context checkpoint ->
+      match checkpoint with
+      | InputNeeded _ as checkpoint ->
+          let ((t, _, _) as token) = Context.next_token context in
+          Printf.printf "Got token: %s\n%!" (Token.print t);
+          run context (Engine.offer checkpoint token)
+      | Shifting _ as checkpoint ->
+          Printf.printf "Tokens: %s\n" (Zipper.pp context.tokens);
+          let context = Context.update context checkpoint in
+          run context (Engine.resume checkpoint)
+      | AboutToReduce _ as checkpoint -> run context (resume checkpoint)
+      | HandlingError env ->
+          incr n_runs;
+          if !n_runs > 1 then failwith "TESTING" else handle_error context env
+      | Accepted ast -> ast
+      | Rejected ->
+          (* Not sure what can be done here - generally
+             only a consequence of repeated HandlingError states*)
+          assert false
   in
   let first_checkpoint = Incremental.main starting_location in
   let file = starting_location.Lexing.pos_fname in
