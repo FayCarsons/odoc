@@ -74,7 +74,7 @@ let message_api =
        {i}" );
     ("Blank line in list", "{ol \n\n}");
     ("Stray table", "{t");
-    ("Empty style", "{i }");
+    ("Empty style", "{i}");
   ]
 
 let _print_token_list tokens =
@@ -101,6 +101,8 @@ let run_test (label, input_text) : (string, string) result =
         ~push_warning
     in
     let _warnings = input.warnings in
+    print_newline ();
+    print_newline ();
     Ok (Printf.sprintf "%s: successful" label)
   with exc ->
     let reason = Printexc.to_string exc in
@@ -119,7 +121,7 @@ let () =
           documentation_cases)
     else documentation_cases
   in
-  let results = [ run_test (List.hd @@ List.rev cases) ] in
+  let results = List.map run_test cases in
   List.iter
     (function Ok s -> print_endline s | Error e -> print_endline e)
     results

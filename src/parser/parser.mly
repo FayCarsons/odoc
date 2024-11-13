@@ -97,6 +97,7 @@
 
 %}
 
+%on_error_reduce toplevel
 %token SPACE NEWLINE
 %token RIGHT_BRACE
 %token RIGHT_CODE_DELIMITER
@@ -158,6 +159,7 @@
 %start <Ast.t> main 
 
 %%
+
 
 (* Utility which wraps the return value of a producer in `Loc.with_location` *)
 let located(rule) == inner = rule; { wrap_location $loc inner }

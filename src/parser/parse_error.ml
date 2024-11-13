@@ -98,6 +98,16 @@ type parser_error =
   | No_markup
   | Unpaired_right_brace
 
+let of_string : string -> parser_error = function
+  | "End_not_allowed" -> End_not_allowed
+  | "Should_not_be_empty" -> Should_not_be_empty
+  | "Not_allowed" -> raise @@ Invalid_argument "todo!"
+  | "Should_be_followed_by_whitespace" -> Should_be_followed_by_whitespace
+  | "Should_begin_line" -> Should_begin_line
+  | "No_markup" -> No_markup
+  | "Unpaired_right_brace" -> Unpaired_right_brace
+  | s -> raise @@ Invalid_argument ("Unknown parser error: " ^ s)
+
 let make_warning :
     ?suggestion:string ->
     element:string ->

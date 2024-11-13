@@ -94,7 +94,7 @@ main: Style Version
 ## Style
 ##
 
-[Insert } $0] Should_not_be_empty
+[Insert \t $0] Should_not_be_empty
 
 main: Simple_ref Table_cell
 ##
@@ -442,7 +442,7 @@ main: List Word
 ## List
 ##
 
-<YOUR SYNTAX ERROR MESSAGE HERE>
+[Remove \n\n $0] Should_not_be_empty
 
 main: List SPACE Word
 ##
